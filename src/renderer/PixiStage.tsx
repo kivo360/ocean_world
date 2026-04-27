@@ -24,6 +24,10 @@ type EntityGfx = {
   group: Container;
   /** Set when body is a Sprite (i.e. atlas had this archetype). */
   sprite?: SpriteAnimState;
+  /** Smoothed render position — lerped between sim ticks for fluid motion. */
+  smoothX: number;
+  smoothY: number;
+  lastFrameMs: number;
 };
 
 export type CameraBounds = { x: number; y: number; w: number; h: number };
@@ -287,10 +291,26 @@ export function PixiStage({
             group.addChild(thinking);
             entityLayer.addChild(group);
 
-            g = { body, energyBar, bubble, label, thinking, group, sprite: spriteState };
+            g = { body, energyBar, bubble, label, thinking, group, sprite: spriteState, smoothX: s.x, smoothY: s.y, lastFrameMs: now };
             gfx.set(s.id, g);
           }
-          g.group.position.set(s.x, s.y);
+
+          // Exponential smoothing of render position so NPCs glide between
+          // sim ticks instead of teleporting.  Player is exempt — zero lag
+          // for the controllable character.
+          const SMOOTH_HALF_LIFE_MS = 80;
+          const MAX_DT_MS = 100;
+          if (s.id === targetId) {
+            g.smoothX = s.x;
+            g.smoothY = s.y;
+          } else {
+            const dt = Math.min(now - g.lastFrameMs, MAX_DT_MS);
+            const factor = 1 - Math.exp(-dt / SMOOTH_HALF_LIFE_MS);
+            g.smoothX += (s.x - g.smoothX) * factor;
+            g.smoothY += (s.y - g.smoothY) * factor;
+          }
+          g.lastFrameMs = now;
+          g.group.position.set(g.smoothX, g.smoothY);
 
           // Sprite animation: pick anim from movement delta, advance frame on
           // the manifest's per-anim duration. Sprites use a different vertical
