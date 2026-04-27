@@ -1,0 +1,24 @@
+name: CI
+
+on:
+  push:
+    branches: [main, quick-wins]
+  pull_request:
+    branches: [main, quick-wins]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: npm ci
+      - name: Build sprite-forge
+        run: |
+          cd tools/sprite-forge
+          npm ci
+          npm run build
+      - run: npm run typecheck
+      - run: npm test
