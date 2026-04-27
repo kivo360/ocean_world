@@ -1,4 +1,4 @@
-import { Application, Container, Graphics, Sprite, Text, TextStyle } from "pixi.js";
+import { Application, Assets, Container, Graphics, Sprite, Text, TextStyle, Texture, TilingSprite } from "pixi.js";
 import { useEffect, useRef } from "react";
 import type { EntitySnapshot } from "../simulation/entity";
 import { ARCHETYPE_COLORS, ARCHETYPE_RADIUS } from "./theme";
@@ -13,17 +13,19 @@ type SpriteAnimState = {
   lastFrameMs: number;
   lastX: number;
   lastY: number;
+  charId: string;
 };
 
 type EntityGfx = {
   body: Graphics | Sprite;
   energyBar: Graphics;
-  bubble: Text;
+  bubble: Container;
   label: Text;
   thinking: Graphics;
   group: Container;
   /** Set when body is a Sprite (i.e. atlas had this archetype). */
   sprite?: SpriteAnimState;
+  shadow?: Graphics;
   /** Smoothed render position — lerped between sim ticks for fluid motion. */
   smoothX: number;
   smoothY: number;
@@ -71,6 +73,24 @@ const BUBBLE_STYLE = new TextStyle({
   fill: 0xffffff,
   stroke: { color: 0x000000, width: 3, join: "round" },
 });
+
+function makeBubble(text: string): Container {
+  const c = new Container();
+  const txt = new Text({ text, style: BUBBLE_STYLE });
+  txt.anchor.set(0.5, 0.5);
+  const padX = 6;
+  const padY = 3;
+  const w = txt.width + padX * 2;
+  const h = txt.height + padY * 2;
+  const bg = new Graphics();
+  bg.roundRect(-w / 2, -h, w, h, 4).fill({ color: 0x1f2937, alpha: 0.92 });
+  bg.roundRect(-w / 2, -h, w, h, 4).stroke({ color: 0xffffff, width: 1, alpha: 0.6 });
+  bg.moveTo(-4, 0).lineTo(0, 5).lineTo(4, 0).fill({ color: 0x1f2937, alpha: 0.92 });
+  txt.position.set(0, -h / 2);
+  c.addChild(bg);
+  c.addChild(txt);
+  return c;
+}
 
 export function PixiStage({
   width,
@@ -147,15 +167,21 @@ export function PixiStage({
       worldLayer = new Container();
       app.stage.addChild(worldLayer);
 
-      // Grid covers the full world so it pans naturally with the camera.
-      const bg = new Graphics();
       const { w: wW, h: wH } = worldDimsRef.current;
-      for (let x = 0; x <= wW; x += 50) bg.moveTo(x, 0).lineTo(x, wH);
-      for (let y = 0; y <= wH; y += 50) bg.moveTo(0, y).lineTo(wW, y);
-      bg.stroke({ color: 0x1e293b, width: 1, alpha: 0.4 });
-      worldLayer.addChild(bg);
+
+      const grassTex = await Assets.load<Texture>("/sprites/terrain/grass.png");
+      grassTex.source.scaleMode = "nearest";
+      const ground = new TilingSprite({ texture: grassTex, width: wW, height: wH });
+      worldLayer.addChild(ground);
+
+      const grid = new Graphics();
+      for (let x = 0; x <= wW; x += 50) grid.moveTo(x, 0).lineTo(x, wH);
+      for (let y = 0; y <= wH; y += 50) grid.moveTo(0, y).lineTo(wW, y);
+      grid.stroke({ color: 0x1e293b, width: 1, alpha: 0.15 });
+      worldLayer.addChild(grid);
 
       entityLayer = new Container();
+      entityLayer.sortableChildren = true;
       worldLayer.addChild(entityLayer);
 
       selectionRing = new Graphics();
@@ -242,11 +268,11 @@ export function PixiStage({
             // Fallback: coloured circle (synthetic look used before sprites).
             let body: Graphics | Sprite;
             let spriteState: SpriteAnimState | undefined;
+            let shadow: Graphics | undefined;
             if (atlas && atlas.hasCharacter(s.archetype)) {
-              const tex = atlas.frameTexture(s.archetype, "idle", 0)!;
+              const charId = atlas.resolveCharacterId(s.archetype, s.id) ?? s.archetype;
+              const tex = atlas.frameTexture(charId, "idle", 0)!;
               const sprite = new Sprite(tex);
-              // Anchor near the bottom so the entity's (x, y) corresponds to
-              // the character's feet — natural for top-down placement.
               sprite.anchor.set(0.5, 0.85);
               body = sprite;
               spriteState = {
@@ -255,7 +281,10 @@ export function PixiStage({
                 lastFrameMs: now,
                 lastX: s.x,
                 lastY: s.y,
+                charId,
               };
+              shadow = new Graphics();
+              shadow.ellipse(0, 4, 7, 2.5).fill({ color: 0x000000, alpha: 0.35 });
             } else {
               const color = ARCHETYPE_COLORS[s.archetype];
               const circle = new Graphics();
@@ -276,14 +305,14 @@ export function PixiStage({
             label.anchor.set(0.5, 0);
             label.alpha = 0.6;
 
-            const bubble = new Text({ text: "", style: BUBBLE_STYLE });
-            bubble.anchor.set(0.5, 1);
+            const bubble = new Container();
             bubble.visible = false;
 
             const thinking = new Graphics();
             thinking.visible = false;
 
             const group = new Container();
+            if (shadow) group.addChild(shadow);
             group.addChild(body);
             group.addChild(energyBar);
             group.addChild(label);
@@ -291,7 +320,7 @@ export function PixiStage({
             group.addChild(thinking);
             entityLayer.addChild(group);
 
-            g = { body, energyBar, bubble, label, thinking, group, sprite: spriteState, smoothX: s.x, smoothY: s.y, lastFrameMs: now };
+            g = { body, energyBar, bubble, label, thinking, group, sprite: spriteState, shadow, smoothX: s.x, smoothY: s.y, lastFrameMs: now };
             gfx.set(s.id, g);
           }
 
@@ -311,6 +340,7 @@ export function PixiStage({
           }
           g.lastFrameMs = now;
           g.group.position.set(g.smoothX, g.smoothY);
+          g.group.zIndex = Math.round(s.y);
 
           // Sprite animation: pick anim from movement delta, advance frame on
           // the manifest's per-anim duration. Sprites use a different vertical
@@ -320,7 +350,7 @@ export function PixiStage({
             const ss = g.sprite;
             const dx = s.x - ss.lastX;
             const dy = s.y - ss.lastY;
-            const desired = pickAnimation(dx, dy);
+            const desired = pickAnimation(dx, dy, ss.animName);
             const anim = atlas.animation(desired);
             if (anim) {
               if (desired !== ss.animName) {
@@ -332,7 +362,7 @@ export function PixiStage({
                 ss.frameIdx = (ss.frameIdx + advance) % anim.frames;
                 ss.lastFrameMs = now;
               }
-              const tex = atlas.frameTexture(s.archetype, ss.animName, ss.frameIdx);
+              const tex = atlas.frameTexture(ss.charId, ss.animName, ss.frameIdx);
               if (tex) g.body.texture = tex;
             }
             ss.lastX = s.x;
@@ -361,9 +391,12 @@ export function PixiStage({
           const headTopY = isSprite ? -28 : -ARCHETYPE_RADIUS[s.archetype] - 6;
 
           if (s.speechBubble) {
-            if (g.bubble.text !== s.speechBubble) g.bubble.text = s.speechBubble;
+            if (!g.bubble.visible || (g.bubble.children[1] as Text)?.text !== s.speechBubble) {
+              g.bubble.removeChildren();
+              g.bubble.addChild(makeBubble(s.speechBubble));
+              g.bubble.visible = true;
+            }
             g.bubble.position.set(0, headTopY);
-            g.bubble.visible = true;
           } else {
             g.bubble.visible = false;
           }

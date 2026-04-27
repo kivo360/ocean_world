@@ -1,0 +1,189 @@
+{
+  "_comment": "Variant characters for per-instance visual diversity. Each non-Player archetype gets 3 variants (0=base, 1=palette-swap, 2=hair-swap). The renderer uses resolveCharacterId() to deterministically pick a variant from available ids matching the archetype prefix.",
+  "characters": [
+    {
+      "id": "Person:0",
+      "layers": [
+        "body/male/light.png",
+        "torso/shirts/longsleeve/male/white_longsleeve.png",
+        "legs/pants/male/teal_pants_male.png",
+        "feet/shoes/male/brown_shoes_male.png",
+        "hair/male/bangs/brunette.png"
+      ]
+    },
+    {
+      "id": "Person:1",
+      "layers": [
+        "body/male/light.png",
+        "torso/shirts/longsleeve/male/white_longsleeve.png",
+        "legs/pants/male/teal_pants_male.png",
+        "feet/shoes/male/brown_shoes_male.png",
+        "hair/male/bangs/brunette.png"
+      ],
+      "palette": {
+        "shirtColor": "#3B82F6"
+      }
+    },
+    {
+      "id": "Person:2",
+      "layers": [
+        "body/male/light.png",
+        "torso/shirts/longsleeve/male/white_longsleeve.png",
+        "legs/pants/male/teal_pants_male.png",
+        "feet/shoes/male/brown_shoes_male.png",
+        "hair/male/messy1/blonde.png"
+      ]
+    },
+    {
+      "id": "Merchant:0",
+      "layers": [
+        "body/male/light.png",
+        "torso/shirts/longsleeve/male/maroon_longsleeve.png",
+        "legs/pants/male/red_pants_male.png",
+        "feet/shoes/male/brown_shoes_male.png",
+        "hair/male/ponytail/raven.png",
+        "head/caps/male/leather_cap_male.png"
+      ]
+    },
+    {
+      "id": "Merchant:1",
+      "layers": [
+        "body/male/light.png",
+        "torso/shirts/longsleeve/male/maroon_longsleeve.png",
+        "legs/pants/male/red_pants_male.png",
+        "feet/shoes/male/brown_shoes_male.png",
+        "hair/male/ponytail/raven.png",
+        "head/caps/male/leather_cap_male.png"
+      ],
+      "palette": {
+        "shirtColor": "#10B981"
+      }
+    },
+    {
+      "id": "Merchant:2",
+      "layers": [
+        "body/male/light.png",
+        "torso/shirts/longsleeve/male/maroon_longsleeve.png",
+        "legs/pants/male/red_pants_male.png",
+        "feet/shoes/male/brown_shoes_male.png",
+        "hair/male/bedhead/blonde.png",
+        "head/caps/male/leather_cap_male.png"
+      ]
+    },
+    {
+      "id": "Wanderer:0",
+      "layers": [
+        "body/male/dark.png",
+        "torso/shirts/longsleeve/male/teal_longsleeve.png",
+        "legs/pants/male/teal_pants_male.png",
+        "feet/shoes/male/maroon_shoes_male.png",
+        "hair/male/long/raven.png",
+        "head/hoods/male/cloth_hood_male.png"
+      ]
+    },
+    {
+      "id": "Wanderer:1",
+      "layers": [
+        "body/male/dark.png",
+        "torso/shirts/longsleeve/male/teal_longsleeve.png",
+        "legs/pants/male/teal_pants_male.png",
+        "feet/shoes/male/maroon_shoes_male.png",
+        "hair/male/long/raven.png",
+        "head/hoods/male/cloth_hood_male.png"
+      ],
+      "palette": {
+        "pantsColor": "#8B5CF6"
+      }
+    },
+    {
+      "id": "Wanderer:2",
+      "layers": [
+        "body/male/dark.png",
+        "torso/shirts/longsleeve/male/teal_longsleeve.png",
+        "legs/pants/male/teal_pants_male.png",
+        "feet/shoes/male/maroon_shoes_male.png",
+        "hair/male/bunches/brown.png",
+        "head/hoods/male/cloth_hood_male.png"
+      ]
+    },
+    {
+      "id": "MarketMaker:0",
+      "layers": [
+        "body/male/light.png",
+        "torso/shirts/longsleeve/male/teal_longsleeve.png",
+        "legs/pants/male/white_pants_male.png",
+        "feet/shoes/male/black_shoes_male.png",
+        "hair/male/bedhead/blonde.png"
+      ]
+    },
+    {
+      "id": "MarketMaker:1",
+      "layers": [
+        "body/male/light.png",
+        "torso/shirts/longsleeve/male/teal_longsleeve.png",
+        "legs/pants/male/white_pants_male.png",
+        "feet/shoes/male/black_shoes_male.png",
+        "hair/male/bedhead/blonde.png"
+      ],
+      "palette": {
+        "shirtColor": "#F59E0B"
+      }
+    },
+    {
+      "id": "MarketMaker:2",
+      "layers": [
+        "body/male/light.png",
+        "torso/shirts/longsleeve/male/teal_longsleeve.png",
+        "legs/pants/male/white_pants_male.png",
+        "feet/shoes/male/black_shoes_male.png",
+        "hair/male/long/blonde.png"
+      ]
+    },
+    {
+      "id": "Lawkeeper:0",
+      "layers": [
+        "body/male/dark.png",
+        "torso/chain/mail_male.png",
+        "legs/pants/male/red_pants_male.png",
+        "feet/shoes/male/black_shoes_male.png",
+        "hair/male/long/blonde.png",
+        "head/helms/male/golden_helm_male.png"
+      ]
+    },
+    {
+      "id": "Lawkeeper:1",
+      "layers": [
+        "body/male/dark.png",
+        "torso/chain/mail_male.png",
+        "legs/pants/male/red_pants_male.png",
+        "feet/shoes/male/black_shoes_male.png",
+        "hair/male/long/blonde.png",
+        "head/helms/male/golden_helm_male.png"
+      ],
+      "palette": {
+        "shirtColor": "#94A3B8"
+      }
+    },
+    {
+      "id": "Lawkeeper:2",
+      "layers": [
+        "body/male/dark.png",
+        "torso/chain/mail_male.png",
+        "legs/pants/male/red_pants_male.png",
+        "feet/shoes/male/black_shoes_male.png",
+        "hair/male/ponytail/raven.png",
+        "head/helms/male/golden_helm_male.png"
+      ]
+    },
+    {
+      "id": "Player",
+      "layers": [
+        "body/male/light.png",
+        "torso/shirts/longsleeve/male/white_longsleeve.png",
+        "legs/pants/male/teal_pants_male.png",
+        "feet/shoes/male/brown_shoes_male.png",
+        "hair/male/bunches/brown.png"
+      ]
+    }
+  ]
+}

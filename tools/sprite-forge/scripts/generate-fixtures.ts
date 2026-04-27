@@ -4,7 +4,7 @@
  * compositing can be eyeballed and dimension/positioning bugs surface fast.
  *
  * Usage: npm run fixtures
- * Output: ./fixtures/lpc/{category}/{variant}/{color}.png
+ * Output: ./fixtures/lpc-real/{category}/{variant}/{color}.png
  */
 import sharp from 'sharp';
 import { mkdir } from 'node:fs/promises';
@@ -19,43 +19,55 @@ const SHEET_H = 1344;
 const FRAME = 64;
 
 interface Fixture {
-  category: string;
-  variant: string;
-  color: string;
+  relPath: string;
   rgb: { r: number; g: number; b: number };
-  // Region within a single frame to fill (top, left, w, h relative to frame origin)
   region: { top: number; left: number; w: number; h: number };
 }
 
+function fixture(
+  relPath: string,
+  rgb: { r: number; g: number; b: number },
+  region: { top: number; left: number; w: number; h: number },
+): Fixture {
+  return { relPath, rgb, region };
+}
+
 const FIXTURES: Fixture[] = [
-  // body — covers most of the frame
-  { category: 'body', variant: 'male', color: 'light', rgb: { r: 235, g: 196, b: 156 }, region: { top: 8, left: 16, w: 32, h: 56 } },
-  { category: 'body', variant: 'female', color: 'tanned', rgb: { r: 199, g: 156, b: 110 }, region: { top: 8, left: 16, w: 32, h: 56 } },
+  fixture('body/male/light.png',            { r: 235, g: 196, b: 156 }, { top: 8,  left: 16, w: 32, h: 56 }),
+  fixture('body/male/dark.png',             { r: 120, g: 80,  b: 50  }, { top: 8,  left: 16, w: 32, h: 56 }),
+  fixture('body/female/tanned.png',         { r: 199, g: 156, b: 110 }, { top: 8,  left: 16, w: 32, h: 56 }),
 
-  // hair — top of head only
-  { category: 'hair', variant: 'bangs', color: 'brunette', rgb: { r: 90, g: 60, b: 30 }, region: { top: 4, left: 18, w: 28, h: 16 } },
-  { category: 'hair', variant: 'messy1', color: 'blonde', rgb: { r: 220, g: 190, b: 100 }, region: { top: 4, left: 18, w: 28, h: 16 } },
-  { category: 'hair', variant: 'ponytail', color: 'raven', rgb: { r: 30, g: 30, b: 35 }, region: { top: 4, left: 18, w: 28, h: 18 } },
+  fixture('hair/male/bangs/brunette.png',   { r: 90,  g: 60,  b: 30  }, { top: 4,  left: 18, w: 28, h: 16 }),
+  fixture('hair/male/ponytail/raven.png',   { r: 30,  g: 30,  b: 35  }, { top: 4,  left: 18, w: 28, h: 18 }),
+  fixture('hair/male/long/raven.png',       { r: 30,  g: 30,  b: 35  }, { top: 4,  left: 18, w: 28, h: 20 }),
+  fixture('hair/male/long/blonde.png',      { r: 220, g: 190, b: 100 }, { top: 4,  left: 18, w: 28, h: 20 }),
+  fixture('hair/male/bedhead/blonde.png',   { r: 220, g: 190, b: 100 }, { top: 4,  left: 18, w: 28, h: 16 }),
+  fixture('hair/male/bunches/brown.png',    { r: 120, g: 80,  b: 40  }, { top: 4,  left: 18, w: 28, h: 16 }),
+  fixture('hair/male/messy1/blonde.png',    { r: 220, g: 190, b: 100 }, { top: 4,  left: 18, w: 28, h: 16 }),
 
-  // torso — chest area, base color (white-ish so palette swaps are visible)
-  { category: 'torso', variant: 'longsleeve', color: 'white', rgb: { r: 235, g: 235, b: 235 }, region: { top: 22, left: 18, w: 28, h: 18 } },
-  { category: 'torso', variant: 'shortsleeve', color: 'white', rgb: { r: 235, g: 235, b: 235 }, region: { top: 22, left: 20, w: 24, h: 16 } },
+  fixture('torso/shirts/longsleeve/male/white_longsleeve.png',   { r: 210, g: 210, b: 235 }, { top: 22, left: 18, w: 28, h: 18 }),
+  fixture('torso/shirts/longsleeve/male/maroon_longsleeve.png',  { r: 160, g: 30,  b: 60  }, { top: 22, left: 18, w: 28, h: 18 }),
+  fixture('torso/shirts/longsleeve/male/teal_longsleeve.png',    { r: 30,  g: 150, b: 150 }, { top: 22, left: 18, w: 28, h: 18 }),
 
-  // legs — lower body
-  { category: 'legs', variant: 'pants', color: 'teal', rgb: { r: 60, g: 130, b: 130 }, region: { top: 40, left: 22, w: 20, h: 18 } },
+  fixture('torso/chain/mail_male.png',                           { r: 160, g: 160, b: 170 }, { top: 22, left: 18, w: 28, h: 20 }),
 
-  // feet — bottom strip
-  { category: 'feet', variant: 'boots', color: 'brown', rgb: { r: 70, g: 45, b: 25 }, region: { top: 56, left: 22, w: 20, h: 6 } },
-  { category: 'feet', variant: 'shoes', color: 'brown', rgb: { r: 100, g: 70, b: 40 }, region: { top: 58, left: 22, w: 20, h: 4 } },
+  fixture('legs/pants/male/teal_pants_male.png',   { r: 30,  g: 130, b: 130 }, { top: 40, left: 22, w: 20, h: 18 }),
+  fixture('legs/pants/male/red_pants_male.png',    { r: 180, g: 30,  b: 30  }, { top: 40, left: 22, w: 20, h: 18 }),
+  fixture('legs/pants/male/white_pants_male.png',  { r: 220, g: 220, b: 235 }, { top: 40, left: 22, w: 20, h: 18 }),
+  fixture('legs/pants/male/maroon_pants_male.png', { r: 140, g: 30,  b: 60  }, { top: 40, left: 22, w: 20, h: 18 }),
 
-  // glasses — small accessory
-  { category: 'glasses', variant: 'round', color: 'black', rgb: { r: 20, g: 20, b: 20 }, region: { top: 14, left: 22, w: 20, h: 4 } },
+  fixture('feet/shoes/male/brown_shoes_male.png',  { r: 100, g: 70,  b: 40  }, { top: 58, left: 22, w: 20, h: 4 }),
+  fixture('feet/shoes/male/maroon_shoes_male.png', { r: 140, g: 30,  b: 50  }, { top: 58, left: 22, w: 20, h: 4 }),
+  fixture('feet/shoes/male/black_shoes_male.png',  { r: 25,  g: 25,  b: 25  }, { top: 58, left: 22, w: 20, h: 4 }),
+
+  fixture('head/caps/male/leather_cap_male.png',   { r: 140, g: 100, b: 60  }, { top: 2,  left: 18, w: 28, h: 8 }),
+  fixture('head/hoods/male/cloth_hood_male.png',   { r: 80,  g: 70,  b: 60  }, { top: 2,  left: 18, w: 28, h: 14 }),
+  fixture('head/helms/male/golden_helm_male.png',  { r: 220, g: 180, b: 60  }, { top: 2,  left: 18, w: 28, h: 10 }),
 ];
 
 async function generateOne(f: Fixture, outRoot: string): Promise<void> {
-  const fileDir = join(outRoot, f.category, f.variant);
-  await mkdir(fileDir, { recursive: true });
-  const filePath = join(fileDir, `${f.color}.png`);
+  const filePath = join(outRoot, f.relPath);
+  await mkdir(dirname(filePath), { recursive: true });
 
   // Tile the region across every frame in the sheet so all rows/columns
   // (i.e. all animations and directions) look populated.
@@ -97,7 +109,7 @@ async function generateOne(f: Fixture, outRoot: string): Promise<void> {
 }
 
 async function main(): Promise<void> {
-  const outRoot = join(ROOT, 'fixtures', 'lpc');
+  const outRoot = join(ROOT, 'fixtures', 'lpc-real');
   console.log(`Generating ${FIXTURES.length} fixture sheets (${SHEET_W}x${SHEET_H}) -> ${outRoot}`);
   for (const f of FIXTURES) {
     await generateOne(f, outRoot);
