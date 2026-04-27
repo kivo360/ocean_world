@@ -14,7 +14,8 @@ export type BehaviorName =
   | "Converse"
   | "Rest"
   | "MarkPrice"
-  | "EnforcePolicy";
+  | "EnforcePolicy"
+  | "Gossip";
 
 export type BehaviorState = {
   name: BehaviorName;

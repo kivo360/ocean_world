@@ -85,6 +85,197 @@ export const BEHAVIORS: Record<string, BehaviorMeta> = {
       ]
     }
   },
+  EnforcePolicy: {
+    "id": "ecs:EnforcePolicy",
+    "name": "EnforcePolicy",
+    "domain": "governance",
+    "description": "Patrol, identify hoarding entities (excess goods or money), and levy a small tax. Visible event stream of enforcement actions.",
+    "required_components": [
+      "ecs:PhysicalState",
+      "ecs:FinancialState",
+      "ecs:CognitiveState"
+    ],
+    "reads": [
+      "ecs:PhysicalState",
+      "ecs:FinancialState",
+      "ecs:CognitiveState"
+    ],
+    "writes": [
+      "ecs:FinancialState"
+    ],
+    "actions": [
+      {
+        "name": "scan",
+        "effects": [
+          "identify hoarder among nearby entities"
+        ]
+      },
+      {
+        "name": "warn",
+        "preconditions": [
+          "hoarder identified"
+        ],
+        "effects": [
+          "speak warning"
+        ]
+      },
+      {
+        "name": "levy",
+        "preconditions": [
+          "hoarder identified",
+          "warning issued"
+        ],
+        "effects": [
+          "transfer tax from hoarder to authority"
+        ]
+      }
+    ],
+    "state_machine": {
+      "states": [
+        "Patrol",
+        "Investigating",
+        "Levying",
+        "Cooldown"
+      ],
+      "initial": "Patrol",
+      "transitions": [
+        {
+          "from": "Patrol",
+          "to": "Investigating",
+          "on": "scan"
+        },
+        {
+          "from": "Investigating",
+          "to": "Levying",
+          "on": "warn"
+        },
+        {
+          "from": "Levying",
+          "to": "Cooldown",
+          "on": "levy"
+        },
+        {
+          "from": "Cooldown",
+          "to": "Patrol",
+          "on": "tick"
+        },
+        {
+          "from": "Investigating",
+          "to": "Patrol",
+          "on": "no_target"
+        }
+      ]
+    }
+  },
+  Gossip: {
+    "id": "ecs:Gossip",
+    "name": "Gossip",
+    "domain": "social",
+    "description": "Spread heard information to nearby entities, with progressive decay of details per hop.",
+    "required_components": [
+      "ecs:CognitiveState",
+      "ecs:MemoryLog"
+    ],
+    "reads": [
+      "ecs:CognitiveState",
+      "ecs:MemoryLog"
+    ],
+    "writes": [
+      "ecs:MemoryLog"
+    ],
+    "actions": [
+      {
+        "name": "spread",
+        "preconditions": [
+          "has heard something",
+          "has nearby target"
+        ],
+        "effects": [
+          "queue gossip speech to target"
+        ]
+      }
+    ],
+    "state_machine": {
+      "states": [
+        "Idle",
+        "Speaking"
+      ],
+      "initial": "Idle",
+      "transitions": [
+        {
+          "from": "Idle",
+          "to": "Speaking",
+          "on": "spread"
+        },
+        {
+          "from": "Speaking",
+          "to": "Idle",
+          "on": "end"
+        }
+      ]
+    }
+  },
+  MarkPrice: {
+    "id": "ecs:MarkPrice",
+    "name": "MarkPrice",
+    "domain": "economic",
+    "description": "Periodically broadcast a fair-price quote to nearby traders based on local supply and the merchant's profit value.",
+    "required_components": [
+      "ecs:FinancialState",
+      "ecs:CognitiveState",
+      "ecs:PhysicalState"
+    ],
+    "reads": [
+      "ecs:FinancialState",
+      "ecs:CognitiveState",
+      "ecs:PhysicalState"
+    ],
+    "writes": [
+      "ecs:CognitiveState"
+    ],
+    "actions": [
+      {
+        "name": "compute_quote",
+        "effects": [
+          "set internal price reference"
+        ]
+      },
+      {
+        "name": "broadcast_quote",
+        "preconditions": [
+          "nearby trader present"
+        ],
+        "effects": [
+          "speak price to nearest trader"
+        ]
+      }
+    ],
+    "state_machine": {
+      "states": [
+        "Idle",
+        "Quoting",
+        "Cooldown"
+      ],
+      "initial": "Idle",
+      "transitions": [
+        {
+          "from": "Idle",
+          "to": "Quoting",
+          "on": "compute_quote"
+        },
+        {
+          "from": "Quoting",
+          "to": "Cooldown",
+          "on": "broadcast_quote"
+        },
+        {
+          "from": "Cooldown",
+          "to": "Idle",
+          "on": "tick"
+        }
+      ]
+    }
+  },
   Rest: {
     "id": "ecs:Rest",
     "name": "Rest",
@@ -275,764 +466,6 @@ export const BEHAVIORS: Record<string, BehaviorMeta> = {
           "from": "Arrived",
           "to": "Moving",
           "on": "pick_destination"
-        }
-      ]
-    }
-  },
-  ProposeAndRatify: {
-    "id": "ecs:ProposeAndRatify",
-    "name": "ProposeAndRatify",
-    "domain": "governance",
-    "description": "Draft policy proposals, gather support through deliberation, and transition to active or rejected status based on quorum rules.",
-    "required_components": [
-      "ecs:PolicyRegistry",
-      "ecs:JurisdictionalState",
-      "ecs:SocialGraph"
-    ],
-    "reads": [
-      "ecs:PolicyRegistry.pending_proposals",
-      "ecs:SocialGraph.edges",
-      "ecs:JurisdictionalState.membership"
-    ],
-    "writes": [
-      "ecs:PolicyRegistry.active_policies",
-      "ecs:PolicyRegistry.pending_proposals",
-      "ecs:PolicyRegistry.policy_archive"
-    ],
-    "actions": [
-      {
-        "name": "DraftProposal",
-        "target": "policy_concept",
-        "effect": "create_pending_record"
-      },
-      {
-        "name": "Deliberate",
-        "target": "proposal_id",
-        "effect": "modify_support_scores"
-      },
-      {
-        "name": "Ratify",
-        "target": "proposal_id",
-        "effect": "promote_to_active"
-      },
-      {
-        "name": "Reject",
-        "target": "proposal_id",
-        "effect": "archive_with_reason"
-      }
-    ],
-    "state_machine": {
-      "states": [
-        "idle",
-        "drafting",
-        "deliberating",
-        "ratified",
-        "rejected"
-      ],
-      "initial": "idle",
-      "transitions": [
-        {
-          "from": "idle",
-          "to": "drafting",
-          "on": "begin_draft"
-        },
-        {
-          "from": "drafting",
-          "to": "deliberating",
-          "on": "submit_proposal"
-        },
-        {
-          "from": "deliberating",
-          "to": "ratified",
-          "on": "quorum_reached"
-        },
-        {
-          "from": "deliberating",
-          "to": "rejected",
-          "on": "quorum_failed"
-        },
-        {
-          "from": "deliberating",
-          "to": "rejected",
-          "on": "withdrawn"
-        },
-        {
-          "from": "ratified",
-          "to": "idle",
-          "on": "policy_complete"
-        },
-        {
-          "from": "rejected",
-          "to": "idle",
-          "on": "archive_complete"
-        }
-      ]
-    }
-  },
-  FormCoalition: {
-    "id": "ecs:FormCoalition",
-    "name": "FormCoalition",
-    "domain": "social",
-    "description": "Recruit members, negotiate terms, and establish collective commitment structures for joint action.",
-    "required_components": [
-      "ecs:CoalitionMembership",
-      "ecs:SocialGraph",
-      "ecs:CognitiveState"
-    ],
-    "reads": [
-      "ecs:ReputationProfile",
-      "ecs:MemoryLog",
-      "ecs:SocialGraph"
-    ],
-    "writes": [
-      "ecs:CoalitionMembership",
-      "ecs:SocialGraph"
-    ],
-    "actions": [
-      {
-        "name": "InviteToCoalition",
-        "target": "entity",
-        "precondition": "mutual_awareness && reputation_above_threshold"
-      },
-      {
-        "name": "AcceptInvitation",
-        "target": "self",
-        "precondition": "pending_invitation && value_alignment"
-      },
-      {
-        "name": "ContributeResource",
-        "target": "coalition",
-        "precondition": "member_status"
-      },
-      {
-        "name": "DissolveCoalition",
-        "target": "coalition",
-        "precondition": "founder_role || supermajority_votes"
-      }
-    ],
-    "state_machine": {
-      "states": [
-        "recruiting",
-        "forming",
-        "active",
-        "stagnant",
-        "dissolving"
-      ],
-      "initial": "recruiting",
-      "transitions": [
-        {
-          "from": "recruiting",
-          "to": "forming",
-          "trigger": "threshold_members_reached"
-        },
-        {
-          "from": "forming",
-          "to": "active",
-          "trigger": "charter_ratified"
-        },
-        {
-          "from": "active",
-          "to": "stagnant",
-          "trigger": "contribution_rate_below_minimum"
-        },
-        {
-          "from": "stagnant",
-          "to": "active",
-          "trigger": "renewal_campaign_success"
-        },
-        {
-          "from": [
-            "recruiting",
-            "forming",
-            "active",
-            "stagnant"
-          ],
-          "to": "dissolving",
-          "trigger": "dissolution_vote_passed"
-        }
-      ]
-    }
-  },
-  WorkForPay: {
-    "id": "ecs:WorkForPay",
-    "name": "WorkForPay",
-    "domain": "economic",
-    "description": "Offer labor to an employer in exchange for wage compensation, creating employment relation.",
-    "required_components": [
-      "ecs:FinancialState",
-      "ecs:PhysicalState"
-    ],
-    "reads": [
-      "ecs:FinancialState",
-      "ecs:PhysicalState",
-      "ecs:RoleState"
-    ],
-    "writes": [
-      "ecs:FinancialState",
-      "ecs:RoleState"
-    ],
-    "actions": [
-      {
-        "name": "apply_for_job",
-        "target": "entity",
-        "preconditions": [
-          "unemployed",
-          "has_skill"
-        ],
-        "effects": [
-          "application_sent"
-        ]
-      },
-      {
-        "name": "accept_employment",
-        "target": "entity",
-        "preconditions": [
-          "offer_pending"
-        ],
-        "effects": [
-          "employs_relation_created",
-          "wage_schedule_active"
-        ]
-      },
-      {
-        "name": "perform_labor",
-        "target": "production_site",
-        "preconditions": [
-          "employed",
-          "on_site"
-        ],
-        "effects": [
-          "labor_contributed",
-          "wage_accrued"
-        ]
-      },
-      {
-        "name": "collect_wages",
-        "target": "self",
-        "preconditions": [
-          "wage_due"
-        ],
-        "effects": [
-          "cash_increased",
-          "wage_due_cleared"
-        ]
-      },
-      {
-        "name": "quit_job",
-        "target": "employer",
-        "preconditions": [
-          "employed"
-        ],
-        "effects": [
-          "employs_relation_terminated",
-          "unemployed"
-        ]
-      }
-    ],
-    "state_machine": {
-      "states": [
-        "unemployed",
-        "seeking",
-        "offered",
-        "employed",
-        "disputed"
-      ],
-      "initial": "unemployed",
-      "transitions": [
-        {
-          "from": "unemployed",
-          "to": "seeking",
-          "on": "begin_search"
-        },
-        {
-          "from": "seeking",
-          "to": "offered",
-          "on": "receive_offer"
-        },
-        {
-          "from": "offered",
-          "to": "employed",
-          "on": "accept_offer"
-        },
-        {
-          "from": "offered",
-          "to": "seeking",
-          "on": "reject_offer"
-        },
-        {
-          "from": "employed",
-          "to": "disputed",
-          "on": "payment_missed"
-        },
-        {
-          "from": "disputed",
-          "to": "unemployed",
-          "on": "resolve_or_terminate"
-        },
-        {
-          "from": "employed",
-          "to": "unemployed",
-          "on": "quit_or_fired"
-        }
-      ]
-    }
-  },
-  MediateConflict: {
-    "id": "ecs:MediateConflict",
-    "name": "MediateConflict",
-    "domain": "social",
-    "description": "Intervene between disputing parties to de-escalate, propose resolution, and restore cooperative relations through staged negotiation.",
-    "required_components": [
-      "ecs:SocialGraph",
-      "ecs:ReputationProfile",
-      "ecs:CognitiveState"
-    ],
-    "reads": [
-      "ecs:SocialGraph",
-      "ecs:ReputationProfile",
-      "ecs:NormAdherence"
-    ],
-    "writes": [
-      "ecs:SocialGraph",
-      "ecs:ReputationProfile"
-    ],
-    "actions": [
-      {
-        "name": "identify_dispute",
-        "target": "entity_pair",
-        "effect": "register_conflict"
-      },
-      {
-        "name": "propose_mediation",
-        "target": "disputants",
-        "effect": "offer_session"
-      },
-      {
-        "name": "facilitate_negotiation",
-        "target": "session",
-        "effect": "advance_resolution"
-      },
-      {
-        "name": "ratify_agreement",
-        "target": "disputants",
-        "effect": "update_relations"
-      }
-    ],
-    "state_machine": {
-      "states": [
-        "detecting",
-        "recruiting",
-        "facilitating",
-        "resolving",
-        "concluding"
-      ],
-      "initial": "detecting",
-      "transitions": [
-        {
-          "from": "detecting",
-          "to": "recruiting",
-          "on": "dispute_detected"
-        },
-        {
-          "from": "recruiting",
-          "to": "facilitating",
-          "on": "parties_committed"
-        },
-        {
-          "from": "facilitating",
-          "to": "resolving",
-          "on": "terms_proposed"
-        },
-        {
-          "from": "resolving",
-          "to": "concluding",
-          "on": "agreement_reached"
-        },
-        {
-          "from": "resolving",
-          "to": "facilitating",
-          "on": "terms_rejected"
-        },
-        {
-          "from": "recruiting",
-          "to": "detecting",
-          "on": "parties_decline"
-        }
-      ]
-    }
-  },
-  SociallyLearn: {
-    "id": "ecs:SociallyLearn",
-    "name": "SociallyLearn",
-    "domain": "social",
-    "description": "Acquire skills, strategies, or norms through observation and imitation of successful others, with fidelity decay and innovation chance.",
-    "required_components": [
-      "ecs:MemoryLog",
-      "ecs:SocialGraph",
-      "ecs:CognitiveState"
-    ],
-    "reads": [
-      "ecs:MemoryLog",
-      "ecs:SocialGraph",
-      "ecs:ReputationProfile"
-    ],
-    "writes": [
-      "ecs:BeliefSystem",
-      "ecs:CognitiveState"
-    ],
-    "actions": [
-      {
-        "name": "select_model",
-        "target": "entity",
-        "effect": "set_observation_target"
-      },
-      {
-        "name": "observe_behavior",
-        "target": "model",
-        "effect": "record_demonstration"
-      },
-      {
-        "name": "attempt_reproduction",
-        "target": "self",
-        "effect": "trial_behavior"
-      },
-      {
-        "name": "evaluate_outcome",
-        "target": "self",
-        "effect": "update_learning"
-      }
-    ],
-    "state_machine": {
-      "states": [
-        "seeking",
-        "observing",
-        "rehearsing",
-        "performing",
-        "consolidating"
-      ],
-      "initial": "seeking",
-      "transitions": [
-        {
-          "from": "seeking",
-          "to": "observing",
-          "on": "model_identified"
-        },
-        {
-          "from": "observing",
-          "to": "rehearsing",
-          "on": "demonstration_captured"
-        },
-        {
-          "from": "rehearsing",
-          "to": "performing",
-          "on": "rehearsal_complete"
-        },
-        {
-          "from": "performing",
-          "to": "consolidating",
-          "on": "outcome_observed"
-        },
-        {
-          "from": "performing",
-          "to": "rehearsing",
-          "on": "performance_failed"
-        },
-        {
-          "from": "observing",
-          "to": "seeking",
-          "on": "model_lost"
-        }
-      ]
-    }
-  },
-  DeliberateDecide: {
-    "id": "ecs:DeliberateDecide",
-    "name": "DeliberateDecide",
-    "domain": "cognitive",
-    "description": "Multi-option evaluation using expected utility with belief-weighted outcomes and satisficing thresholds.",
-    "required_components": [
-      "ecs:CognitiveState",
-      "ecs:BeliefSystem",
-      "ecs:AttentionBudget"
-    ],
-    "reads": [
-      "ecs:CognitiveState.values",
-      "ecs:BeliefSystem.confidence_levels",
-      "ecs:AttentionBudget.available"
-    ],
-    "writes": [
-      "ecs:CognitiveState.working_memory_load",
-      "ecs:MemoryLog"
-    ],
-    "actions": [
-      {
-        "name": "GenerateOptions",
-        "description": "Produce candidate actions from current context and available behaviors"
-      },
-      {
-        "name": "EvaluateOutcome",
-        "description": "Query BeliefSystem for outcome probabilities and utilities per option"
-      },
-      {
-        "name": "SelectSatisficing",
-        "description": "Choose first option meeting threshold or best option if attention permits optimization"
-      },
-      {
-        "name": "CommitDecision",
-        "description": "Lock in choice, record reasoning trace to MemoryLog"
-      }
-    ],
-    "state_machine": {
-      "states": [
-        "Idle",
-        "Generating",
-        "Evaluating",
-        "Selecting",
-        "Committed"
-      ],
-      "initial": "Idle",
-      "transitions": [
-        {
-          "from": "Idle",
-          "to": "Generating",
-          "trigger": "decision_required"
-        },
-        {
-          "from": "Generating",
-          "to": "Evaluating",
-          "trigger": "options_ready"
-        },
-        {
-          "from": "Evaluating",
-          "to": "Selecting",
-          "trigger": "utilities_computed"
-        },
-        {
-          "from": "Selecting",
-          "to": "Committed",
-          "trigger": "choice_made"
-        },
-        {
-          "from": "Selecting",
-          "to": "Evaluating",
-          "trigger": "threshold_failed_regenerate",
-          "condition": "attention_remaining > 0"
-        },
-        {
-          "from": "Committed",
-          "to": "Idle",
-          "trigger": "action_executed"
-        }
-      ]
-    }
-  },
-  MetacognitiveReflect: {
-    "id": "ecs:MetacognitiveReflect",
-    "name": "MetacognitiveReflect",
-    "domain": "cognitive",
-    "description": "Monitor and adjust own cognitive processes including confidence calibration, strategy selection, and resource allocation.",
-    "required_components": [
-      "ecs:CognitiveState",
-      "ecs:AttentionBudget",
-      "ecs:MemoryLog"
-    ],
-    "reads": [
-      "ecs:CognitiveState.working_memory_load",
-      "ecs:AttentionBudget.depletion_rate",
-      "ecs:MemoryLog.recent_errors",
-      "ecs:BeliefSystem.confidence_accuracy"
-    ],
-    "writes": [
-      "ecs:CognitiveState.values",
-      "ecs:AttentionBudget.allocation_policy",
-      "ecs:BeliefSystem.confidence_calibration"
-    ],
-    "actions": [
-      {
-        "name": "AssessCalibration",
-        "description": "Compare predicted vs actual outcomes to detect over/under-confidence"
-      },
-      {
-        "name": "AdjustStrategy",
-        "description": "Switch between fast heuristic and slow deliberative modes based on accuracy history"
-      },
-      {
-        "name": "ReallocateAttention",
-        "description": "Redistribute attention budget across domains based on recent payoff"
-      },
-      {
-        "name": "ConsolidateMemory",
-        "description": "Compress and index MemoryLog contents during low-load periods"
-      }
-    ],
-    "state_machine": {
-      "states": [
-        "Dormant",
-        "Monitoring",
-        "Assessing",
-        "Adjusting",
-        "Consolidating"
-      ],
-      "initial": "Dormant",
-      "transitions": [
-        {
-          "from": "Dormant",
-          "to": "Monitoring",
-          "trigger": "tick_interval_elapsed"
-        },
-        {
-          "from": "Monitoring",
-          "to": "Assessing",
-          "trigger": "sufficient_samples_collected"
-        },
-        {
-          "from": "Assessing",
-          "to": "Adjusting",
-          "trigger": "calibration_drift_detected"
-        },
-        {
-          "from": "Assessing",
-          "to": "Dormant",
-          "trigger": "calibration_acceptable"
-        },
-        {
-          "from": "Adjusting",
-          "to": "Consolidating",
-          "trigger": "strategy_updated"
-        },
-        {
-          "from": "Consolidating",
-          "to": "Dormant",
-          "trigger": "consolidation_complete"
-        },
-        {
-          "from": "Monitoring",
-          "to": "Consolidating",
-          "trigger": "low_load_window_detected"
-        }
-      ]
-    }
-  },
-  CoordinateJointAction: {
-    "id": "ecs:CoordinateJointAction",
-    "name": "CoordinateJointAction",
-    "domain": "organizational",
-    "description": "Synchronize multiple actors toward shared deliverables through commitment protocols, progress tracking, and conflict resolution.",
-    "required_components": [
-      "ecs:RoleState",
-      "ecs:ProcessFlow"
-    ],
-    "reads": [
-      "ecs:SocialGraph",
-      "ecs:CoalitionMembership",
-      "ecs:ReputationProfile"
-    ],
-    "writes": [
-      "ecs:ProcessFlow",
-      "ecs:OrganizationalMemory"
-    ],
-    "actions": [
-      {
-        "name": "ProposeCommitment",
-        "parameters": [
-          "actor_id",
-          "deliverable_spec",
-          "deadline",
-          "resource_claim"
-        ]
-      },
-      {
-        "name": "AcceptCommitment",
-        "parameters": [
-          "actor_id",
-          "proposal_id",
-          "counter_terms"
-        ]
-      },
-      {
-        "name": "ReportProgress",
-        "parameters": [
-          "commitment_id",
-          "completion_ratio",
-          "blocker_flags"
-        ]
-      },
-      {
-        "name": "EscalateConflict",
-        "parameters": [
-          "commitment_id",
-          "conflict_type",
-          "requested_mediator"
-        ]
-      },
-      {
-        "name": "ResolveAndRecord",
-        "parameters": [
-          "commitment_id",
-          "resolution_outcome",
-          "lessons_extracted"
-        ]
-      }
-    ],
-    "state_machine": {
-      "states": [
-        "Idle",
-        "Forming",
-        "Committed",
-        "Executing",
-        "Blocked",
-        "Completing",
-        "Resolving",
-        "Closed"
-      ],
-      "initial": "Idle",
-      "transitions": [
-        {
-          "from": "Idle",
-          "to": "Forming",
-          "trigger": "ProposeCommitment"
-        },
-        {
-          "from": "Forming",
-          "to": "Committed",
-          "trigger": "AcceptCommitment"
-        },
-        {
-          "from": "Committed",
-          "to": "Executing",
-          "trigger": "start_execution"
-        },
-        {
-          "from": "Executing",
-          "to": "Blocked",
-          "trigger": "EscalateConflict"
-        },
-        {
-          "from": "Executing",
-          "to": "Completing",
-          "trigger": "ReportProgress",
-          "guard": "completion_ratio >= 1.0"
-        },
-        {
-          "from": "Blocked",
-          "to": "Resolving",
-          "trigger": "mediator_assigned"
-        },
-        {
-          "from": "Resolving",
-          "to": "Executing",
-          "trigger": "resolution_achieved"
-        },
-        {
-          "from": "Resolving",
-          "to": "Closed",
-          "trigger": "ResolveAndRecord",
-          "guard": "resolution_outcome == 'abandoned'"
-        },
-        {
-          "from": "Completing",
-          "to": "Closed",
-          "trigger": "ResolveAndRecord"
         }
       ]
     }

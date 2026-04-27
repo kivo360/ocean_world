@@ -1,0 +1,22 @@
+{
+  "@context": "../context.jsonld",
+  "@id": "ecs:Gossip",
+  "@type": ["ecs:Behavior", "owl:Class"],
+  "name": "Gossip",
+  "domain": "social",
+  "description": "Spread heard information to nearby entities, with progressive decay of details per hop.",
+  "required_components": ["ecs:CognitiveState", "ecs:MemoryLog"],
+  "reads": ["ecs:CognitiveState", "ecs:MemoryLog"],
+  "writes": ["ecs:MemoryLog"],
+  "actions": [
+    { "name": "spread", "preconditions": ["has heard something", "has nearby target"], "effects": ["queue gossip speech to target"] }
+  ],
+  "state_machine": {
+    "states": ["Idle", "Speaking"],
+    "initial": "Idle",
+    "transitions": [
+      { "from": "Idle", "to": "Speaking", "on": "spread" },
+      { "from": "Speaking", "to": "Idle", "on": "end" }
+    ]
+  }
+}

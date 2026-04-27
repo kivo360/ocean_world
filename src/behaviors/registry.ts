@@ -1,6 +1,7 @@
 import type { BehaviorRegistry } from "./behavior";
 import { Converse } from "./converse";
 import { EnforcePolicy } from "./enforce-policy";
+import { Gossip } from "./gossip";
 import { MarkPrice } from "./mark-price";
 import { Rest } from "./rest";
 import { Trade } from "./trade";
@@ -13,4 +14,5 @@ export const REGISTRY: BehaviorRegistry = {
   Rest,
   MarkPrice,
   EnforcePolicy,
+  Gossip,
 };
