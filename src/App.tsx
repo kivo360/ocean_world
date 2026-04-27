@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { PLAYER_ID, spawnPlayer } from "./simulation/archetypes";
+import { PLAYER_ID } from "./simulation/archetypes";
 import {
   findNearestInteractTarget,
   pendingPlayerOffer,
@@ -20,17 +20,19 @@ import {
   type ReasonerStatus,
 } from "./ontology/oxigraph-reasoner";
 import { PixiStage } from "./renderer/PixiStage";
-import { smallVillage } from "./scenarios/small-village";
 import type { EntitySnapshot } from "./simulation/entity";
 import {
   createSurrealGraphMemory,
   type SurrealGraphMemory,
 } from "./simulation/surreal-graph-memory";
+import { buildWorldWithPlayer } from "./simulation/test-helpers";
 import { runTick } from "./simulation/tick";
-import { addEntity, snapshot, type World } from "./simulation/world";
+import { snapshot, type World } from "./simulation/world";
+import { ChatLog } from "./ui/ChatLog";
 import { ChatPanel } from "./ui/ChatPanel";
 import { Controls } from "./ui/Controls";
 import { DeliberationsPanel } from "./ui/DeliberationsPanel";
+import { MiniMap } from "./ui/MiniMap";
 import {
   InteractionMenu,
   type InteractionChoice,
@@ -72,26 +74,6 @@ const PLAYER_GREETINGS = [
   "how goes it",
   "good day",
 ];
-
-function buildWorldWithPlayer(opts: {
-  width: number;
-  height: number;
-  seed?: number;
-  memoryGraph: SurrealGraphMemory;
-}): World {
-  const world = smallVillage(opts);
-  // Spawn the player at the centre of the first region so they start cleanly
-  // inside one map rather than on a region boundary.
-  const home = world.regions[0];
-  const spawnX = home ? home.bounds.x + home.bounds.w / 2 : world.bounds.width / 2;
-  const spawnY = home ? home.bounds.y + home.bounds.h / 2 : world.bounds.height / 2;
-  addEntity(
-    world,
-    spawnPlayer({ bounds: world.bounds, tick: world.tick, x: spawnX, y: spawnY }),
-  );
-  if (home) world.activeRegionId = home.id;
-  return world;
-}
 
 function buildT3Client(): T3Client {
   const env = (import.meta.env ?? {}) as Record<string, string | undefined>;
@@ -162,7 +144,7 @@ export default function App() {
   const [renderTick, setRenderTick] = useState(0);
   const [t3UseEnabled, setT3UseEnabled] = useState(true);
   const [thinkingIds, setThinkingIds] = useState<ReadonlySet<string>>(() => new Set());
-  const [rightTab, setRightTab] = useState<"inspector" | "chat" | "deliberations">("inspector");
+  const [rightTab, setRightTab] = useState<"inspector" | "chat" | "deliberations" | "world-log">("inspector");
   const [menuTargetId, setMenuTargetId] = useState<string | null>(null);
   menuTargetIdRef.current = menuTargetId;
 
@@ -583,6 +565,11 @@ export default function App() {
             getThinkingIds={getThinkingIds}
             onSelect={setSelectedId}
           />
+          <MiniMap
+            getSnapshots={getSnapshots}
+            worldWidth={WORLD_WIDTH}
+            worldHeight={WORLD_HEIGHT}
+          />
           <ScenarioOverlay
             world={worldRef.current}
             width={STAGE_WIDTH}
@@ -655,7 +642,7 @@ export default function App() {
               flexShrink: 0,
             }}
           >
-            {(["inspector", "chat", "deliberations"] as const).map((tab) => (
+            {(["inspector", "chat", "deliberations", "world-log"] as const).map((tab) => (
               <button
                 key={tab}
                 onClick={() => setRightTab(tab)}
@@ -712,6 +699,12 @@ export default function App() {
                   setSelectedId(id);
                   setRightTab("inspector");
                 }}
+              />
+            )}
+            {rightTab === "world-log" && (
+              <ChatLog
+                snapshots={snapshotsRef.current}
+                renderTick={renderTick}
               />
             )}
           </div>
