@@ -1,0 +1,18 @@
+{
+  "@context": "../context.jsonld",
+  "@id": "ecs:hierarchy/trading-system",
+  "@type": "ecs:ValueHierarchy",
+  "name": "Trading system",
+  "purpose": "Enable economic exchange between entities.",
+  "root": "ecs:EconomicBehavior",
+  "included_components": [
+    { "@id": "ecs:FinancialState", "relevance": 1.0, "role": "Trade settlement" },
+    { "@id": "ecs:InventoryState", "relevance": 0.9, "role": "Goods available for trade" },
+    { "@id": "ecs:CognitiveState", "relevance": 0.5, "role": "Values drive pricing (fairness, profit)" }
+  ],
+  "included_behaviors": [
+    { "@id": "ecs:Trade", "relevance": 1.0, "role": "Core exchange" }
+  ],
+  "excluded": ["ecs:Wander", "ecs:Rest"],
+  "composition_metadata": { "pruning_threshold": 0.4, "total_concepts": 4, "coverage_score": 0.75 }
+}

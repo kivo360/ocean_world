@@ -1,0 +1,15 @@
+{
+  "@context": "../context.jsonld",
+  "@id": "ecs:Lawkeeper",
+  "@type": ["ecs:Archetype", "owl:Class"],
+  "name": "Lawkeeper",
+  "scale": "micro",
+  "description": "Mobile authority figure that patrols the world, identifies entities hoarding goods or money, and enforces a small tax. Driven by fairness value.",
+  "components": [
+    "ecs:PhysicalState",
+    "ecs:CognitiveState",
+    "ecs:FinancialState",
+    "ecs:MemoryLog"
+  ],
+  "behaviors": ["ecs:EnforcePolicy", "ecs:Wander", "ecs:Converse", "ecs:Rest"]
+}

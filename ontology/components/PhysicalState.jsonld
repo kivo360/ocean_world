@@ -1,0 +1,20 @@
+{
+  "@context": "../context.jsonld",
+  "@id": "ecs:PhysicalState",
+  "@type": ["ecs:Component", "owl:Class"],
+  "name": "PhysicalState",
+  "category": "state",
+  "domain": "environmental",
+  "description": "Spatial position, mobility, perception radius, and energy.",
+  "fields": [
+    { "name": "x", "type": "float" },
+    { "name": "y", "type": "float" },
+    { "name": "speed", "type": "float", "range": [0, null] },
+    { "name": "perceptionRadius", "type": "float", "range": [0, null] },
+    { "name": "energy", "type": "float", "range": [0, 1] },
+    { "name": "destX", "type": "float|null" },
+    { "name": "destY", "type": "float|null" }
+  ],
+  "composable_with": ["ecs:CognitiveState", "ecs:InventoryState"],
+  "broader": "ecs:StateComponent"
+}

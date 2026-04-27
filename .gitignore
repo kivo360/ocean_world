@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.DS_Store
+.vite/
+coverage/
+*.log
+*.tsbuildinfo
+.env
+.env.local
+.env.*.local
+ontology/generated/runtime/

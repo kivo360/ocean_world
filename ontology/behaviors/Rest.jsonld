@@ -1,0 +1,24 @@
+{
+  "@context": "../context.jsonld",
+  "@id": "ecs:Rest",
+  "@type": ["ecs:Behavior", "owl:Class"],
+  "name": "Rest",
+  "domain": "environmental",
+  "description": "Recover energy when depleted. Survival behavior — not value-weighted.",
+  "required_components": ["ecs:PhysicalState"],
+  "reads": ["ecs:PhysicalState"],
+  "writes": ["ecs:PhysicalState"],
+  "actions": [
+    { "name": "begin_rest", "preconditions": ["energy low"], "effects": ["enter Resting state"] },
+    { "name": "recover", "effects": ["energy += tick"] }
+  ],
+  "state_machine": {
+    "states": ["Active", "Resting", "Recovered"],
+    "initial": "Active",
+    "transitions": [
+      { "from": "Active", "to": "Resting", "on": "begin_rest" },
+      { "from": "Resting", "to": "Recovered", "on": "recover" },
+      { "from": "Recovered", "to": "Active", "on": "tick" }
+    ]
+  }
+}

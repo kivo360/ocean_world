@@ -1,0 +1,27 @@
+{
+  "@context": "../context.jsonld",
+  "@id": "ecs:EnforcePolicy",
+  "@type": ["ecs:Behavior", "owl:Class"],
+  "name": "EnforcePolicy",
+  "domain": "governance",
+  "description": "Patrol, identify hoarding entities (excess goods or money), and levy a small tax. Visible event stream of enforcement actions.",
+  "required_components": ["ecs:PhysicalState", "ecs:FinancialState", "ecs:CognitiveState"],
+  "reads": ["ecs:PhysicalState", "ecs:FinancialState", "ecs:CognitiveState"],
+  "writes": ["ecs:FinancialState"],
+  "actions": [
+    { "name": "scan", "effects": ["identify hoarder among nearby entities"] },
+    { "name": "warn", "preconditions": ["hoarder identified"], "effects": ["speak warning"] },
+    { "name": "levy", "preconditions": ["hoarder identified", "warning issued"], "effects": ["transfer tax from hoarder to authority"] }
+  ],
+  "state_machine": {
+    "states": ["Patrol", "Investigating", "Levying", "Cooldown"],
+    "initial": "Patrol",
+    "transitions": [
+      { "from": "Patrol", "to": "Investigating", "on": "scan" },
+      { "from": "Investigating", "to": "Levying", "on": "warn" },
+      { "from": "Levying", "to": "Cooldown", "on": "levy" },
+      { "from": "Cooldown", "to": "Patrol", "on": "tick" },
+      { "from": "Investigating", "to": "Patrol", "on": "no_target" }
+    ]
+  }
+}

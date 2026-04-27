@@ -1,0 +1,31 @@
+actions:
+  - name: TradeAction
+    category: economic/behavior
+    children: [BuyAction, SellAction, RentAction, PayAction, TipAction]
+  - name: CommunicateAction
+    category: social/behavior
+    children: [CommentAction, InformAction, InviteAction, ReplyAction]
+  - name: InteractAction
+    category: social/behavior
+    children: [BefriendAction, FollowAction, JoinAction, SubscribeAction]
+  - name: OrganizeAction
+    category: organizational/behavior
+    children: [AllocateAction, ApplyAction, BookmarkAction, PlanAction]
+  - name: AssessAction
+    category: cognitive/behavior
+    children: [ReviewAction, ChooseAction, VoteAction, ReactAction]
+  - name: MoveAction
+    category: environmental/behavior
+    children: [ArriveAction, DepartAction, TravelAction]
+  - name: CreateAction
+    category: organizational/behavior
+    children: [CookAction, DrawAction, WriteAction, PhotographAction]
+  - name: TransferAction
+    category: economic/behavior
+    children: [DonateAction, GiveAction, LendAction, LoanAction, SendAction]
+  - name: ConsumeAction
+    category: cognitive/behavior
+    children: [WatchAction, ReadAction, EatAction, DrinkAction]
+  - name: FindAction
+    category: cognitive/behavior
+    children: [DiscoverAction, TrackAction]

@@ -1,0 +1,35 @@
+classes:
+  - name: give-13.1
+    members: [give, hand, pass, sell, trade]
+    roles:
+      agent: entity_id
+      theme: resource_id
+      recipient: entity_id
+    subevent: [has(agent, theme), transfer(theme, agent, recipient), has(recipient, theme)]
+    ecs_mapping: Trade behavior — transfer effects on FinancialState/InventoryState
+  - name: hire-13.5.3
+    members: [hire, employ, engage, recruit]
+    roles:
+      agent: entity_id
+      theme: entity_id
+    subevent: [employer_of(agent, theme)]
+    ecs_mapping: WorkForPay behavior — creates employs relation
+  - name: say-37.7
+    members: [say, tell, whisper, shout, mention]
+    roles:
+      agent: entity_id
+      topic: string
+      recipient: entity_id
+    ecs_mapping: Converse behavior — emit speech event
+  - name: conspire-71
+    members: [conspire, collude, ally, coalesce]
+    roles:
+      agent: entity_id
+      coagent: entity_id
+    ecs_mapping: FormCoalition behavior — creates member_of edges
+  - name: appraise-32
+    members: [appraise, assess, evaluate, judge]
+    roles:
+      agent: entity_id
+      theme: entity_id_or_concept
+    ecs_mapping: Reputation or quality-score update

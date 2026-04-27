@@ -1,0 +1,60 @@
+{
+  "characters": [
+    {
+      "id": "hero-default",
+      "body": { "base": "male", "skinTone": "light" },
+      "hair": { "style": "bangs", "color": "brunette" },
+      "clothing": {
+        "shirt": "longsleeve",
+        "pants": "pants",
+        "shoes": "boots"
+      },
+      "accessories": {
+        "hat": null,
+        "glasses": null,
+        "cape": null
+      },
+      "palette": {
+        "shirtColor": "#4A90D9",
+        "pantsColor": "#3D3D3A"
+      }
+    },
+    {
+      "id": "engineer",
+      "body": { "base": "male", "skinTone": "light" },
+      "hair": { "style": "messy1", "color": "blonde" },
+      "clothing": {
+        "shirt": "shortsleeve",
+        "pants": "pants",
+        "shoes": "shoes"
+      },
+      "accessories": {
+        "hat": null,
+        "glasses": "round",
+        "cape": null
+      },
+      "palette": {
+        "shirtColor": "#D97A4A"
+      }
+    },
+    {
+      "id": "designer",
+      "body": { "base": "female", "skinTone": "tanned" },
+      "hair": { "style": "ponytail", "color": "raven" },
+      "clothing": {
+        "shirt": "longsleeve",
+        "pants": "pants",
+        "shoes": "boots"
+      },
+      "accessories": {
+        "hat": null,
+        "glasses": null,
+        "cape": null
+      },
+      "palette": {
+        "shirtColor": "#7E4AD9",
+        "pantsColor": "#2D2D2A"
+      }
+    }
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "@context": "../context.jsonld",
+  "@id": "ecs:MarketMaker",
+  "@type": ["ecs:Archetype", "owl:Class"],
+  "name": "MarketMaker",
+  "scale": "micro",
+  "description": "Stationary trader that broadcasts price quotes and trades aggressively. Visible at a distance, sets local market prices.",
+  "components": [
+    "ecs:PhysicalState",
+    "ecs:CognitiveState",
+    "ecs:FinancialState",
+    "ecs:InventoryState",
+    "ecs:MemoryLog"
+  ],
+  "behaviors": ["ecs:MarkPrice", "ecs:Trade", "ecs:Converse", "ecs:Rest"]
+}

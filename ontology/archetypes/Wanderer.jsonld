@@ -1,0 +1,14 @@
+{
+  "@context": "../context.jsonld",
+  "@id": "ecs:Wanderer",
+  "@type": ["ecs:Archetype", "owl:Class"],
+  "name": "Wanderer",
+  "scale": "micro",
+  "description": "Exploratory agent with high curiosity, fast movement, wide perception.",
+  "components": [
+    "ecs:PhysicalState",
+    "ecs:CognitiveState",
+    "ecs:MemoryLog"
+  ],
+  "behaviors": ["ecs:Wander", "ecs:Converse", "ecs:Rest"]
+}

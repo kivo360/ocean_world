@@ -1,0 +1,26 @@
+{
+  "@context": "../context.jsonld",
+  "@id": "ecs:Trade",
+  "@type": ["ecs:Behavior", "owl:Class"],
+  "name": "Trade",
+  "domain": "economic",
+  "description": "Exchange goods for money with a counterparty. Fairness-weighted pricing.",
+  "required_components": ["ecs:FinancialState", "ecs:InventoryState"],
+  "reads": ["ecs:FinancialState", "ecs:InventoryState", "ecs:CognitiveState"],
+  "writes": ["ecs:FinancialState", "ecs:InventoryState"],
+  "actions": [
+    { "name": "make_offer", "effects": ["queue trade offer to target"] },
+    { "name": "accept_deal", "preconditions": ["offer pending", "can afford"], "effects": ["transfer money and goods"] },
+    { "name": "decline", "effects": ["clear offer"] }
+  ],
+  "state_machine": {
+    "states": ["Idle", "Offering", "Negotiating", "Settling"],
+    "initial": "Idle",
+    "transitions": [
+      { "from": "Idle", "to": "Offering", "on": "make_offer" },
+      { "from": "Offering", "to": "Settling", "on": "accept_deal" },
+      { "from": "Offering", "to": "Idle", "on": "decline" },
+      { "from": "Settling", "to": "Idle", "on": "complete" }
+    ]
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "@context": "../context.jsonld",
+  "@id": "ecs:Converse",
+  "@type": ["ecs:Behavior", "owl:Class"],
+  "name": "Converse",
+  "domain": "social",
+  "description": "Initiate, hear, and respond to short utterances from nearby entities. Two-phase: A speaks, B hears next tick.",
+  "required_components": ["ecs:CognitiveState", "ecs:MemoryLog"],
+  "reads": ["ecs:CognitiveState", "ecs:MemoryLog"],
+  "writes": ["ecs:MemoryLog"],
+  "actions": [
+    { "name": "initiate", "effects": ["queue speech to target"] },
+    { "name": "respond", "preconditions": ["heard something"], "effects": ["queue reply"] },
+    { "name": "end", "effects": ["return to Idle"] }
+  ],
+  "state_machine": {
+    "states": ["Idle", "Speaking", "Listening"],
+    "initial": "Idle",
+    "transitions": [
+      { "from": "Idle", "to": "Speaking", "on": "initiate" },
+      { "from": "Listening", "to": "Speaking", "on": "respond" },
+      { "from": "Speaking", "to": "Idle", "on": "end" }
+    ]
+  }
+}

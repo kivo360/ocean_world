@@ -1,0 +1,28 @@
+{
+  "name": "sprite-forge",
+  "version": "0.2.0",
+  "description": "LPC sprite compositing and texture-atlas packing CLI for ocean-world",
+  "type": "module",
+  "private": true,
+  "bin": {
+    "sprite-forge": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/cli.ts",
+    "clean": "rm -rf dist",
+    "fixtures": "tsx scripts/generate-fixtures.ts",
+    "smoke": "tsx scripts/smoke-test.ts"
+  },
+  "dependencies": {
+    "commander": "^12.1.0",
+    "glob": "^11.0.0",
+    "maxrects-packer": "^2.7.3",
+    "sharp": "^0.33.5"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.21.0",
+    "typescript": "^5.6.3"
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "@context": "../context.jsonld",
+  "@id": "ecs:MarkPrice",
+  "@type": ["ecs:Behavior", "owl:Class"],
+  "name": "MarkPrice",
+  "domain": "economic",
+  "description": "Periodically broadcast a fair-price quote to nearby traders based on local supply and the merchant's profit value.",
+  "required_components": ["ecs:FinancialState", "ecs:CognitiveState", "ecs:PhysicalState"],
+  "reads": ["ecs:FinancialState", "ecs:CognitiveState", "ecs:PhysicalState"],
+  "writes": ["ecs:CognitiveState"],
+  "actions": [
+    { "name": "compute_quote", "effects": ["set internal price reference"] },
+    { "name": "broadcast_quote", "preconditions": ["nearby trader present"], "effects": ["speak price to nearest trader"] }
+  ],
+  "state_machine": {
+    "states": ["Idle", "Quoting", "Cooldown"],
+    "initial": "Idle",
+    "transitions": [
+      { "from": "Idle", "to": "Quoting", "on": "compute_quote" },
+      { "from": "Quoting", "to": "Cooldown", "on": "broadcast_quote" },
+      { "from": "Cooldown", "to": "Idle", "on": "tick" }
+    ]
+  }
+}

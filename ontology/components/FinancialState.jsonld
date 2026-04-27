@@ -1,0 +1,15 @@
+{
+  "@context": "../context.jsonld",
+  "@id": "ecs:FinancialState",
+  "@type": ["ecs:Component", "owl:Class"],
+  "name": "FinancialState",
+  "category": "resource",
+  "domain": "economic",
+  "description": "Monetary balances, cashflow, and credit lines.",
+  "fields": [
+    { "name": "money", "type": "float", "range": [0, null] },
+    { "name": "goods", "type": "float", "range": [0, null] }
+  ],
+  "composable_with": ["ecs:InventoryState", "ecs:ReputationProfile"],
+  "broader": "ecs:ResourceComponent"
+}

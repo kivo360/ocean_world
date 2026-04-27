@@ -1,0 +1,14 @@
+{
+  "@context": "../context.jsonld",
+  "@id": "ecs:MemoryLog",
+  "@type": ["ecs:Component", "owl:Class"],
+  "name": "MemoryLog",
+  "category": "state",
+  "domain": "cognitive",
+  "description": "Ring buffer of recent perceived events the entity can reason over.",
+  "fields": [
+    { "name": "recent", "type": "list<MemoryEvent>" }
+  ],
+  "composable_with": ["ecs:CognitiveState"],
+  "broader": "ecs:StateComponent"
+}

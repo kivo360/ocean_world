@@ -1,0 +1,16 @@
+{
+  "@context": "../context.jsonld",
+  "@id": "ecs:Merchant",
+  "@type": ["ecs:Archetype", "owl:Class"],
+  "name": "Merchant",
+  "scale": "micro",
+  "description": "Commerce-focused agent with larger perception radius and goods inventory.",
+  "components": [
+    "ecs:PhysicalState",
+    "ecs:CognitiveState",
+    "ecs:FinancialState",
+    "ecs:InventoryState",
+    "ecs:MemoryLog"
+  ],
+  "behaviors": ["ecs:Trade", "ecs:Converse", "ecs:Rest"]
+}

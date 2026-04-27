@@ -1,0 +1,16 @@
+{
+  "@context": "../context.jsonld",
+  "@id": "ecs:CognitiveState",
+  "@type": ["ecs:Component", "owl:Class"],
+  "name": "CognitiveState",
+  "category": "state",
+  "domain": "cognitive",
+  "description": "Values, attention focus, and working-memory load. Values drive T2 utility weighting and T3 character.",
+  "fields": [
+    { "name": "values", "type": "map<string,float>" },
+    { "name": "attentionFocus", "type": "string|null" },
+    { "name": "workingMemoryLoad", "type": "float", "range": [0, 1] }
+  ],
+  "composable_with": ["ecs:MemoryLog", "ecs:PhysicalState", "ecs:SocialGraph"],
+  "broader": "ecs:StateComponent"
+}

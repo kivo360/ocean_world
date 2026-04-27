@@ -1,0 +1,68 @@
+{
+  "_comment": "Maps ocean-world archetypes to LPC layer combos. The id matches the archetype string used by src/simulation/archetypes.ts; the renderer keys sprite lookups off it.",
+  "characters": [
+    {
+      "id": "Person",
+      "layers": [
+        "body/male/light.png",
+        "torso/shirts/longsleeve/male/white_longsleeve.png",
+        "legs/pants/male/teal_pants_male.png",
+        "feet/shoes/male/brown_shoes_male.png",
+        "hair/male/bangs/brunette.png"
+      ]
+    },
+    {
+      "id": "Merchant",
+      "layers": [
+        "body/male/light.png",
+        "torso/shirts/longsleeve/male/maroon_longsleeve.png",
+        "legs/pants/male/red_pants_male.png",
+        "feet/shoes/male/brown_shoes_male.png",
+        "hair/male/ponytail/raven.png",
+        "head/caps/male/leather_cap_male.png"
+      ]
+    },
+    {
+      "id": "Wanderer",
+      "layers": [
+        "body/male/dark.png",
+        "torso/shirts/longsleeve/male/teal_longsleeve.png",
+        "legs/pants/male/teal_pants_male.png",
+        "feet/shoes/male/maroon_shoes_male.png",
+        "hair/male/long/raven.png",
+        "head/hoods/male/cloth_hood_male.png"
+      ]
+    },
+    {
+      "id": "MarketMaker",
+      "layers": [
+        "body/male/light.png",
+        "torso/shirts/longsleeve/male/teal_longsleeve.png",
+        "legs/pants/male/white_pants_male.png",
+        "feet/shoes/male/black_shoes_male.png",
+        "hair/male/bedhead/blonde.png"
+      ]
+    },
+    {
+      "id": "Lawkeeper",
+      "layers": [
+        "body/male/dark.png",
+        "torso/chain/mail_male.png",
+        "legs/pants/male/red_pants_male.png",
+        "feet/shoes/male/black_shoes_male.png",
+        "hair/male/long/blonde.png",
+        "head/helms/male/golden_helm_male.png"
+      ]
+    },
+    {
+      "id": "Player",
+      "layers": [
+        "body/male/light.png",
+        "torso/shirts/longsleeve/male/white_longsleeve.png",
+        "legs/pants/male/teal_pants_male.png",
+        "feet/shoes/male/brown_shoes_male.png",
+        "hair/male/bunches/brown.png"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "@context": "../context.jsonld",
+  "@id": "ecs:Person",
+  "@type": ["ecs:Archetype", "owl:Class"],
+  "name": "Person",
+  "scale": "micro",
+  "description": "Generic social-economic agent. Wanders, trades, talks, rests.",
+  "components": [
+    "ecs:PhysicalState",
+    "ecs:CognitiveState",
+    "ecs:FinancialState",
+    "ecs:InventoryState",
+    "ecs:MemoryLog"
+  ],
+  "behaviors": ["ecs:Wander", "ecs:Converse", "ecs:Trade", "ecs:Rest"]
+}

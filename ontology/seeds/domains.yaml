@@ -1,0 +1,31 @@
+domains:
+  - name: economic
+    description: Trade, labor, production, capital, ownership.
+    target: 20
+    sibling_domains: [organizational, environmental]
+    example_concepts: [FinancialState, InventoryState, Trade, WorkForPay]
+  - name: social
+    description: Trust, reputation, coalitions, communication, norms.
+    target: 18
+    sibling_domains: [cognitive, organizational]
+    example_concepts: [Converse, ReputationProfile, SocialGraph, FormCoalition]
+  - name: cognitive
+    description: Beliefs, attention, learning, memory, values, decision.
+    target: 15
+    sibling_domains: [social]
+    example_concepts: [CognitiveState, MemoryLog, AttentionBudget, LearnSkill]
+  - name: governance
+    description: Policy, regulation, voting, taxation, enforcement.
+    target: 12
+    sibling_domains: [organizational, social]
+    example_concepts: [GovernanceState, GovernViaPolicy]
+  - name: environmental
+    description: Physical space, resources, infrastructure, energy.
+    target: 10
+    sibling_domains: [economic]
+    example_concepts: [PhysicalState, Wander, Rest]
+  - name: organizational
+    description: Firm structure, roles, processes, culture.
+    target: 15
+    sibling_domains: [economic, social, governance]
+    example_concepts: [ProcessState, FormCoalition]

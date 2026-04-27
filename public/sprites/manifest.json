@@ -1,0 +1,86 @@
+{
+  "version": 3,
+  "atlasFile": "atlas.png",
+  "atlasWidth": 512,
+  "atlasHeight": 512,
+  "layout": {
+    "frameWidth": 32,
+    "frameHeight": 32,
+    "animations": {
+      "idle": {
+        "row": 0,
+        "frames": 2,
+        "loop": true,
+        "frameDurationMs": 400
+      },
+      "walk-e": {
+        "row": 1,
+        "frames": 4,
+        "loop": true,
+        "frameDurationMs": 150
+      },
+      "walk-s": {
+        "row": 2,
+        "frames": 4,
+        "loop": true,
+        "frameDurationMs": 150
+      },
+      "walk-w": {
+        "row": 3,
+        "frames": 4,
+        "loop": true,
+        "frameDurationMs": 150
+      },
+      "walk-n": {
+        "row": 4,
+        "frames": 4,
+        "loop": true,
+        "frameDurationMs": 150
+      }
+    }
+  },
+  "characters": [
+    {
+      "id": "Lawkeeper",
+      "x": 0,
+      "y": 0,
+      "sheetWidth": 128,
+      "sheetHeight": 160
+    },
+    {
+      "id": "MarketMaker",
+      "x": 130,
+      "y": 0,
+      "sheetWidth": 128,
+      "sheetHeight": 160
+    },
+    {
+      "id": "Merchant",
+      "x": 260,
+      "y": 0,
+      "sheetWidth": 128,
+      "sheetHeight": 160
+    },
+    {
+      "id": "Person",
+      "x": 0,
+      "y": 162,
+      "sheetWidth": 128,
+      "sheetHeight": 160
+    },
+    {
+      "id": "Player",
+      "x": 0,
+      "y": 324,
+      "sheetWidth": 128,
+      "sheetHeight": 160
+    },
+    {
+      "id": "Wanderer",
+      "x": 130,
+      "y": 162,
+      "sheetWidth": 128,
+      "sheetHeight": 160
+    }
+  ]
+}

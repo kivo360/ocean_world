@@ -1,0 +1,14 @@
+{
+  "@context": "../context.jsonld",
+  "@id": "ecs:InventoryState",
+  "@type": ["ecs:Component", "owl:Class"],
+  "name": "InventoryState",
+  "category": "resource",
+  "domain": "economic",
+  "description": "Named item counts held by the entity.",
+  "fields": [
+    { "name": "items", "type": "map<string,int>" }
+  ],
+  "composable_with": ["ecs:FinancialState", "ecs:PhysicalState"],
+  "broader": "ecs:ResourceComponent"
+}

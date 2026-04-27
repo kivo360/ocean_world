@@ -1,0 +1,25 @@
+{
+  "@context": "../context.jsonld",
+  "@id": "ecs:Wander",
+  "@type": ["ecs:Behavior", "owl:Class"],
+  "name": "Wander",
+  "domain": "environmental",
+  "description": "Pick a destination and move to it, emitting move_to actions.",
+  "required_components": ["ecs:PhysicalState"],
+  "reads": ["ecs:PhysicalState"],
+  "writes": ["ecs:PhysicalState"],
+  "actions": [
+    { "name": "pick_destination", "effects": ["set PhysicalState.destX/destY"] },
+    { "name": "move", "preconditions": ["has destination"], "effects": ["step toward destination"] },
+    { "name": "arrive", "effects": ["clear destination"] }
+  ],
+  "state_machine": {
+    "states": ["Idle", "Moving", "Arrived"],
+    "initial": "Idle",
+    "transitions": [
+      { "from": "Idle", "to": "Moving", "on": "pick_destination" },
+      { "from": "Moving", "to": "Arrived", "on": "arrive" },
+      { "from": "Arrived", "to": "Moving", "on": "pick_destination" }
+    ]
+  }
+}

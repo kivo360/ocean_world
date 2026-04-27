@@ -1,0 +1,25 @@
+{
+  "@context": {
+    "@vocab": "https://ocean-world.local/ontology/",
+    "ecs": "https://ocean-world.local/ontology/",
+    "skos": "http://www.w3.org/2004/02/skos/core#",
+    "owl": "http://www.w3.org/2002/07/owl#",
+    "rdfs": "http://www.w3.org/2000/01/rdf-schema#",
+    "name": "rdfs:label",
+    "description": "rdfs:comment",
+    "broader": "skos:broader",
+    "narrower": "skos:narrower",
+    "category": "ecs:category",
+    "domain": "ecs:domain",
+    "fields": "ecs:hasField",
+    "required_components": "ecs:requiresComponent",
+    "reads": "ecs:readsComponent",
+    "writes": "ecs:writesComponent",
+    "actions": "ecs:hasAction",
+    "state_machine": "ecs:hasStateMachine",
+    "components": "ecs:hasComponent",
+    "behaviors": "ecs:hasBehavior",
+    "composable_with": "ecs:composableWith",
+    "scale": "ecs:scale"
+  }
+}
