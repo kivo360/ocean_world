@@ -27,6 +27,7 @@ export type CognitiveState = {
 export type FinancialState = {
   money: number;
   goods: number;
+  savings: number;
 };
 
 export type InventoryState = {

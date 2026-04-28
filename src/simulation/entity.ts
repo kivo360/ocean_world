@@ -31,6 +31,8 @@ export type Entity = {
   state: Record<BehaviorName, BehaviorState | undefined>;
   activeBehavior: BehaviorName;
   createdTick: number;
+  lastBehaviorTick: Partial<Record<BehaviorName, number>>;
+  cooldowns: Partial<Record<BehaviorName, number>>;
 };
 
 export type EntitySnapshot = {
@@ -44,5 +46,6 @@ export type EntitySnapshot = {
   energy: number;
   money: number;
   goods: number;
+  savings: number;
   speechBubble: string | null;
 };

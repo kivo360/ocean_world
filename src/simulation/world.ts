@@ -170,6 +170,7 @@ export function snapshot(world: World): EntitySnapshot[] {
       energy: p?.energy ?? 0,
       money: f?.money ?? 0,
       goods: f?.goods ?? 0,
+      savings: f?.savings ?? 0,
       speechBubble: bubble && bubble.expiresAtTick >= world.tick ? bubble.msg : null,
     });
   }

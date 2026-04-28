@@ -166,6 +166,7 @@ export function spawnEntity(opts: {
       financial: {
         money: spec.baseMoney + opts.rng.int(-10, 10),
         goods: spec.baseGoods,
+        savings: 0,
       },
       inventory: { items: {} },
       memory: { recent: [] },
@@ -182,6 +183,8 @@ export function spawnEntity(opts: {
     },
     activeBehavior: spec.behaviors[0]!,
     createdTick: opts.tick,
+    lastBehaviorTick: {},
+    cooldowns: {},
   };
   return entity;
 }
@@ -213,7 +216,7 @@ export function spawnPlayer(opts: {
       perceived: { nearbyIds: [], incomingSpeech: [], tradeOffers: [] },
       // Starting wallet so the player can accept Merchant offers. Goods
       // accumulate as they buy and could later be sold back.
-      financial: { money: 100, goods: 0 },
+      financial: { money: 100, goods: 0, savings: 0 },
     },
     behaviors: [],
     state: {
@@ -227,5 +230,7 @@ export function spawnPlayer(opts: {
     // Placeholder — decide() short-circuits before reading this for players.
     activeBehavior: "Wander",
     createdTick: opts.tick,
+    lastBehaviorTick: {},
+    cooldowns: {},
   };
 }
