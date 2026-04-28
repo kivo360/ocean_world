@@ -28,7 +28,7 @@ import {
   type SurrealGraphMemory,
 } from "./simulation/surreal-graph-memory";
 import { runTick } from "./simulation/tick";
-import { addEntity, snapshot, type World } from "./simulation/world";
+import { addEntity, emit, snapshot, type World } from "./simulation/world";
 import { ChatPanel } from "./ui/ChatPanel";
 import { Controls } from "./ui/Controls";
 import { DeliberationsPanel } from "./ui/DeliberationsPanel";
@@ -522,6 +522,48 @@ export default function App() {
     }
   }, []);
 
+  const handleGiftItem = useCallback(() => {
+    const w = worldRef.current;
+    const targetId = selectedId;
+    if (!targetId) return;
+    const player = w.entities.get(PLAYER_ID);
+    const target = w.entities.get(targetId);
+    if (!player || !target) return;
+    const pf = player.components.financial;
+    const tf = target.components.financial;
+    if (!pf || !tf || pf.goods < 1) return;
+    pf.goods -= 1;
+    tf.goods += 1;
+    w.speechBubbles.set(targetId, {
+      msg: "🎁",
+      expiresAtTick: w.tick + 60,
+    });
+    emit(w, {
+      kind: "trade",
+      source: PLAYER_ID,
+      target: targetId,
+      summary: `Player gifted 1 good to ${target.name}`,
+    });
+    snapshotsRef.current = snapshot(w);
+    setRenderTick((t) => t + 1);
+  }, [selectedId]);
+
+  const handlePinMemory = useCallback(() => {
+    const w = worldRef.current;
+    const targetId = selectedId;
+    if (!targetId) return;
+    const target = w.entities.get(targetId);
+    if (!target) return;
+    w.memoryGraph.insert({
+      tick: w.tick,
+      kind: "pinned",
+      subject: targetId,
+      summary: `[PINNED] ${target.name} (${target.archetype})`,
+    });
+    snapshotsRef.current = snapshot(w);
+    setRenderTick((t) => t + 1);
+  }, [selectedId]);
+
   const t3Stats = t3QueueRef.current.size();
 
   return (
@@ -864,6 +906,8 @@ export default function App() {
                 registry={ontologyRef.current.registry}
                 world={worldRef.current}
                 surrealGraph={surrealGraphRef.current}
+                onGiftItem={handleGiftItem}
+                onPinMemory={handlePinMemory}
               />
             )}
             {rightTab === "chat" && (
