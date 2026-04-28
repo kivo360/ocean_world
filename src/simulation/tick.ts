@@ -4,10 +4,12 @@ import { t3ActionToTickAction } from "../llm/t3-queue";
 import type { OntologyReasoner } from "../ontology/oxigraph-reasoner";
 import type { Action, WorldEvent } from "./actions";
 import type { Values } from "./components";
-import type { BehaviorName, Entity } from "./entity";
+import type { Archetype, BehaviorName, Entity } from "./entity";
 import { findRegion } from "./regions";
 import { expireActiveScenario, maybeRunScenario } from "./scenarios";
+import { spawnEntity } from "./archetypes";
 import {
+  addEntity,
   emit,
   entityActivity,
   findNearby,
@@ -44,6 +46,37 @@ const BEHAVIOR_COOLDOWN_TICKS = 3;
 // Recency weighting: bias toward behaviors not done recently
 const RECENCY_COOLDOWN_PERIOD = 5;
 const RECENCY_BONUS = 0.3;
+
+const ARCHETYPE_DECAY_RATES: Record<string, number> = {
+  Person: 0.002,
+  Merchant: 0.001,
+  Wanderer: 0.003,
+  MarketMaker: 0.001,
+  Lawkeeper: 0.002,
+  Player: 0,
+};
+
+const BEHAVIOR_ENERGY_COSTS: Partial<Record<BehaviorName, number>> = {
+  Wander: 0.003,
+  Converse: 0.001,
+  Trade: 0.002,
+  Rest: -0.005,
+};
+
+const STARVING_GRACE_TICKS = 3;
+const BIRTH_INTERVAL = 50;
+const POPULATION_HISTORY_WINDOW = 10;
+
+const DENSITY_TARGET_DENOMINATOR = 20000;
+
+// Archetype spawn weights for births (based on smallVillage proportions)
+const BIRTH_ARCHETYPE_WEIGHTS: Array<{ archetype: Archetype; weight: number }> = [
+  { archetype: "Person", weight: 60 },
+  { archetype: "Merchant", weight: 6 },
+  { archetype: "Wanderer", weight: 18 },
+  { archetype: "MarketMaker", weight: 3 },
+  { archetype: "Lawkeeper", weight: 2 },
+];
 
 function entityIdHash(id: string): number {
   let h = 0;
@@ -558,15 +591,30 @@ function applyPerceivedInputs(world: World, ctx: ResolveContext): void {
   }
 }
 
-// -- Passive decay ------------------------------------------------------------
+// -- Passive decay (metabolism) -----------------------------------------------
 function passiveDecay(world: World, ambientFrame: boolean): void {
   for (const entity of world.entities.values()) {
-    if (entity.archetype === "Player") continue; // no fatigue for the player
+    if (entity.archetype === "Player") continue;
     const mode = entityActivity(world, entity, ambientFrame);
-    if (mode === "frozen") continue; // frozen NPCs don't tire
+    if (mode === "frozen") continue;
     const p = entity.components.physical;
     if (!p) continue;
-    p.energy = Math.max(0, p.energy - 0.002);
+
+    const baseRate = ARCHETYPE_DECAY_RATES[entity.archetype] ?? 0.002;
+    let decay = baseRate;
+
+    const behaviorCost = BEHAVIOR_ENERGY_COSTS[entity.activeBehavior];
+    if (behaviorCost !== undefined) {
+      decay += behaviorCost;
+    } else {
+      decay += 0.001; // mild cost for other behaviors
+    }
+
+    if (entity.activeBehavior === "PursueViolators") {
+      decay += 0.004;
+    }
+
+    p.energy = Math.max(0, p.energy - decay);
 
     // Mood decay: drift toward neutral (0.5) each tick.
     const cog = entity.components.cognitive;
@@ -581,6 +629,12 @@ function passiveDecay(world: World, ambientFrame: boolean): void {
       const draw = Math.min(f.savings, 2);
       f.savings -= draw;
       p.energy = Math.min(1, p.energy + draw * 0.15);
+    }
+
+    if (p.energy <= 0) {
+      entity.starvingTicks = (entity.starvingTicks ?? 0) + 1;
+    } else {
+      entity.starvingTicks = 0;
     }
   }
 
@@ -604,6 +658,94 @@ function passiveDecay(world: World, ambientFrame: boolean): void {
   // Trim the cross-entity graph: drop facts older than 600 ticks, hard-cap 5k.
   if (world.tick % 50 === 0) {
     world.memoryGraph.ttlPrune(world.tick, 600, 5000);
+  }
+}
+
+// -- Death lifecycle ----------------------------------------------------------
+function processDeath(world: World): void {
+  const deadIds: string[] = [];
+  for (const entity of world.entities.values()) {
+    if (entity.archetype === "Player") continue;
+    if (entity.starvingTicks !== undefined && entity.starvingTicks >= STARVING_GRACE_TICKS) {
+      deadIds.push(entity.id);
+    }
+  }
+  for (const id of deadIds) {
+    const entity = world.entities.get(id);
+    if (!entity) continue;
+    emit(world, {
+      kind: "death",
+      source: id,
+      summary: `${entity.name} starved after ${entity.starvingTicks} ticks without energy`,
+    });
+    world.entities.delete(id);
+    world.order = world.order.filter((eid) => eid !== id);
+    world.speechBubbles.delete(id);
+  }
+}
+
+// -- Birth lifecycle ----------------------------------------------------------
+function processBirth(world: World): void {
+  const target = Math.floor((world.bounds.width * world.bounds.height) / DENSITY_TARGET_DENOMINATOR);
+  const currentCount = world.entities.size;
+  if (currentCount >= target) return;
+
+  const gap = target - currentCount;
+  const toSpawn = Math.min(gap, 3);
+
+  for (let i = 0; i < toSpawn; i++) {
+    const pick = world.rng.range(0, 1);
+    let cumulative = 0;
+    const totalWeight = BIRTH_ARCHETYPE_WEIGHTS.reduce((sum, aw) => sum + aw.weight, 0);
+    let chosenArchetype: Archetype = "Person";
+    for (const entry of BIRTH_ARCHETYPE_WEIGHTS) {
+      cumulative += entry.weight / totalWeight;
+      if (pick <= cumulative) {
+        chosenArchetype = entry.archetype;
+        break;
+      }
+    }
+
+    const same = Array.from(world.entities.values()).filter(
+      (e) => e.archetype === chosenArchetype && e.components.physical,
+    );
+    let spawnX: number;
+    let spawnY: number;
+    if (same.length > 0) {
+      const cluster = same[world.rng.int(0, same.length - 1)]!;
+      const cp = cluster.components.physical!;
+      spawnX = Math.max(20, Math.min(world.bounds.width - 20, cp.x + world.rng.range(-40, 40)));
+      spawnY = Math.max(20, Math.min(world.bounds.height - 20, cp.y + world.rng.range(-40, 40)));
+    } else {
+      spawnX = world.rng.range(40, world.bounds.width - 40);
+      spawnY = world.rng.range(40, world.bounds.height - 40);
+    }
+
+    const entity = spawnEntity({
+      archetype: chosenArchetype,
+      rng: world.rng,
+      bounds: world.bounds,
+      tick: world.tick,
+      x: spawnX,
+      y: spawnY,
+    });
+    if (entity.components.physical) {
+      entity.components.physical.energy = 0.4 + world.rng.range(0, 0.2);
+    }
+
+    addEntity(world, entity);
+    emit(world, {
+      kind: "birth",
+      source: entity.id,
+      summary: `${entity.name} (${chosenArchetype}) was born`,
+    });
+  }
+}
+
+function updateDensityTuning(world: World): void {
+  world.populationHistory.push(world.entities.size);
+  if (world.populationHistory.length > POPULATION_HISTORY_WINDOW) {
+    world.populationHistory.shift();
   }
 }
 
@@ -637,6 +779,11 @@ export function runTick(
   const ctx = resolve(world, actions);
   applyPerceivedInputs(world, ctx);
   passiveDecay(world, ambientFrame);
+  processDeath(world);
+  if (world.tick % BIRTH_INTERVAL === 0) {
+    processBirth(world);
+  }
+  updateDensityTuning(world);
   // Kick off T3 batch for any newly-queued entities. Non-blocking. Only
   // active-region NPCs get queued (allowT3 gate in decide), so this never
   // fires LLM calls for ambient regions.

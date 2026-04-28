@@ -53,6 +53,8 @@ export type World = {
   // Optional deterministic replay recorder. When attached, each tick is
   // snapshotted for later comparison (A/B testing, regression).
   replayRecorder?: ReplayRecorder;
+  // Ring buffer of population counts for density auto-tuning.
+  populationHistory: number[];
 };
 
 const GRAPHED_EVENT_KINDS: ReadonlySet<string> = new Set([
@@ -81,6 +83,7 @@ export function createWorld(opts: {
     regions: opts.regions ?? [],
     activeRegionId: null,
     decorations: [],
+    populationHistory: [],
   };
 }
 

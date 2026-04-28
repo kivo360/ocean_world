@@ -37,6 +37,7 @@ export type Entity = {
   createdTick: number;
   lastBehaviorTick: Partial<Record<BehaviorName, number>>;
   cooldowns: Partial<Record<BehaviorName, number>>;
+  starvingTicks?: number;
 };
 
 export type EntitySnapshot = {
