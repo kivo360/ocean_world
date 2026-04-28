@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { PLAYER_ID, spawnPlayer } from "./simulation/archetypes";
-import type { Archetype } from "./simulation/entity";
 import {
   findNearestInteractTarget,
   pendingPlayerOffer,
@@ -20,6 +19,7 @@ import {
   type OntologyReasoner,
   type ReasonerStatus,
 } from "./ontology/oxigraph-reasoner";
+import { HoverPeek } from "./ui/HoverPeek";
 import { PixiStage } from "./renderer/PixiStage";
 import { smallVillage } from "./scenarios/small-village";
 import type { EntitySnapshot } from "./simulation/entity";
@@ -28,7 +28,7 @@ import {
   type SurrealGraphMemory,
 } from "./simulation/surreal-graph-memory";
 import { runTick } from "./simulation/tick";
-import { addEntity, emit, snapshot, type World } from "./simulation/world";
+import { addEntity, snapshot, type World } from "./simulation/world";
 import { ChatPanel } from "./ui/ChatPanel";
 import { Controls } from "./ui/Controls";
 import { DeliberationsPanel } from "./ui/DeliberationsPanel";
@@ -63,16 +63,6 @@ const INTERACT_KEYS = new Set(["e", "E"]);
 const ACCEPT_KEYS = new Set(["y", "Y"]);
 const INTERACT_COOLDOWN_MS = 400;
 const INTERACT_RADIUS = 80;
-const BROADCAST_RADIUS = 200;
-const DAY_CYCLE_TICKS = 240;
-
-const ARCHETYPE_LEGEND: ReadonlyArray<{ name: Archetype; color: string }> = [
-  { name: "Person", color: "#7dd3fc" },
-  { name: "Merchant", color: "#fbbf24" },
-  { name: "Wanderer", color: "#a78bfa" },
-  { name: "MarketMaker", color: "#f472b6" },
-  { name: "Lawkeeper", color: "#4ade80" },
-];
 // Short, friendly. NPCs respond via Converse so meaning matters less than
 // having varied openers — repeating the same line every time gets stale.
 const PLAYER_GREETINGS = [
@@ -158,7 +148,6 @@ export default function App() {
   );
   const snapshotsRef = useRef<readonly EntitySnapshot[]>(snapshot(worldRef.current));
   const keysHeldRef = useRef<Set<string>>(new Set());
-  const shiftHeldRef = useRef(false);
   const lastInteractAtRef = useRef(0);
   const menuTargetIdRef = useRef<string | null>(null);
 
@@ -168,6 +157,8 @@ export default function App() {
   // on app boot — provide the key via .env.local then restart the dev server.
   const t3QueueRef = useRef<T3Queue>(new T3Queue(buildT3Client(), 8));
 
+  const [hoveredId, setHoveredId] = useState<string | null>(null);
+  const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
   const [playing, setPlaying] = useState(true);
   const [speed, setSpeed] = useState(2);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -177,10 +168,6 @@ export default function App() {
   const [rightTab, setRightTab] = useState<"inspector" | "chat" | "deliberations">("inspector");
   const [menuTargetId, setMenuTargetId] = useState<string | null>(null);
   menuTargetIdRef.current = menuTargetId;
-
-  const [archetypeFilter, setArchetypeFilter] = useState<Archetype | null>(null);
-  const [speechDraft, setSpeechDraft] = useState("");
-  const [broadcastDraft, setBroadcastDraft] = useState("");
 
   // Refs for callbacks so the effect only runs on width/height change.
   const getSnapshots = useCallback(() => snapshotsRef.current, []);
@@ -197,6 +184,11 @@ export default function App() {
     }
     return { x: 0, y: 0, w: w.bounds.width, h: w.bounds.height };
   }, []);
+
+  const getBroadcastFlash = useCallback(
+    () => worldRef.current.broadcastFlash,
+    [],
+  );
 
   const doTick = useCallback(() => {
     runTick(worldRef.current, REGISTRY, {
@@ -232,9 +224,6 @@ export default function App() {
   useEffect(() => {
     const held = keysHeldRef.current;
     const onKeyDown = (e: KeyboardEvent) => {
-      const focused = document.activeElement as HTMLElement | null;
-      if (focused?.tagName === "INPUT" || focused?.tagName === "TEXTAREA") return;
-      if (e.key === "Shift") { shiftHeldRef.current = true; return; }
       // Menu hotkeys take priority while it's open.
       if (menuTargetIdRef.current) {
         if (e.key === "Escape") {
@@ -293,10 +282,9 @@ export default function App() {
       if (e.key.startsWith("Arrow")) e.preventDefault();
     };
     const onKeyUp = (e: KeyboardEvent) => {
-      if (e.key === "Shift") shiftHeldRef.current = false;
       held.delete(e.key);
     };
-    const onBlur = () => { held.clear(); shiftHeldRef.current = false; };
+    const onBlur = () => held.clear();
     window.addEventListener("keydown", onKeyDown);
     window.addEventListener("keyup", onKeyUp);
     window.addEventListener("blur", onBlur);
@@ -331,8 +319,7 @@ export default function App() {
         const p = player?.components.physical;
         if (p) {
           const len = Math.hypot(dx, dy);
-          const speedMul = shiftHeldRef.current ? 2 : 1;
-          const move = PLAYER_SPEED_PX_PER_SEC * dt * speedMul;
+          const move = PLAYER_SPEED_PX_PER_SEC * dt;
           p.x += (dx / len) * move;
           p.y += (dy / len) * move;
           const b = worldRef.current.bounds;
@@ -487,83 +474,6 @@ export default function App() {
     [],
   );
 
-  const handleDirectSpeak = useCallback((msg: string) => {
-    if (!msg.trim()) return;
-    const w = worldRef.current;
-    const targetId = findNearestInteractTarget(w, INTERACT_RADIUS);
-    if (targetId) {
-      playerSpeak(w, targetId, msg.trim());
-      snapshotsRef.current = snapshot(w);
-      setRenderTick((t) => t + 1);
-    }
-  }, []);
-
-  const handleBroadcast = useCallback((msg: string) => {
-    if (!msg.trim()) return;
-    const w = worldRef.current;
-    const player = w.entities.get(PLAYER_ID);
-    const pp = player?.components.physical;
-    if (!pp) return;
-    let spoke = false;
-    for (const [id, entity] of w.entities) {
-      if (id === PLAYER_ID) continue;
-      const ep = entity.components.physical;
-      if (!ep) continue;
-      const dx = pp.x - ep.x;
-      const dy = pp.y - ep.y;
-      if (dx * dx + dy * dy <= BROADCAST_RADIUS * BROADCAST_RADIUS) {
-        playerSpeak(w, id, msg.trim());
-        spoke = true;
-      }
-    }
-    if (spoke) {
-      snapshotsRef.current = snapshot(w);
-      setRenderTick((t) => t + 1);
-    }
-  }, []);
-
-  const handleGiftItem = useCallback(() => {
-    const w = worldRef.current;
-    const targetId = selectedId;
-    if (!targetId) return;
-    const player = w.entities.get(PLAYER_ID);
-    const target = w.entities.get(targetId);
-    if (!player || !target) return;
-    const pf = player.components.financial;
-    const tf = target.components.financial;
-    if (!pf || !tf || pf.goods < 1) return;
-    pf.goods -= 1;
-    tf.goods += 1;
-    w.speechBubbles.set(targetId, {
-      msg: "🎁",
-      expiresAtTick: w.tick + 60,
-    });
-    emit(w, {
-      kind: "trade",
-      source: PLAYER_ID,
-      target: targetId,
-      summary: `Player gifted 1 good to ${target.name}`,
-    });
-    snapshotsRef.current = snapshot(w);
-    setRenderTick((t) => t + 1);
-  }, [selectedId]);
-
-  const handlePinMemory = useCallback(() => {
-    const w = worldRef.current;
-    const targetId = selectedId;
-    if (!targetId) return;
-    const target = w.entities.get(targetId);
-    if (!target) return;
-    w.memoryGraph.insert({
-      tick: w.tick,
-      kind: "pinned",
-      subject: targetId,
-      summary: `[PINNED] ${target.name} (${target.archetype})`,
-    });
-    snapshotsRef.current = snapshot(w);
-    setRenderTick((t) => t + 1);
-  }, [selectedId]);
-
   const t3Stats = t3QueueRef.current.size();
 
   return (
@@ -611,20 +521,8 @@ export default function App() {
               {activeRegionName}
             </div>
           )}
-          <div
-            style={{
-              fontSize: 11,
-              padding: "3px 8px",
-              borderRadius: 999,
-              background: "#1e293b",
-              color: worldRef.current.tick % DAY_CYCLE_TICKS < DAY_CYCLE_TICKS / 2 ? "#fbbf24" : "#a78bfa",
-              letterSpacing: 0.4,
-            }}
-          >
-            {worldRef.current.tick % DAY_CYCLE_TICKS < DAY_CYCLE_TICKS / 2 ? "☀️ Day" : "🌙 Night"} · t{worldRef.current.tick}
-          </div>
           <div style={{ fontSize: 11, opacity: 0.5 }}>
-            WASD/arrows · Shift sprint · E greet · Y accept · click to inspect
+            WASD/arrows · E greet · Y accept · click to inspect
           </div>
         </div>
       </header>
@@ -643,110 +541,6 @@ export default function App() {
         onReset={reset}
         onToggleT3={() => setT3UseEnabled((v) => !v)}
       />
-
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 12,
-          padding: "4px 2px",
-          flexWrap: "wrap",
-        }}
-      >
-        {ARCHETYPE_LEGEND.map(({ name, color }) => (
-          <button
-            key={name}
-            onClick={() => setArchetypeFilter((prev) => (prev === name ? null : name))}
-            style={{
-              fontSize: 11,
-              padding: "3px 10px",
-              borderRadius: 999,
-              border: `1px solid ${color}`,
-              background: archetypeFilter === name ? color : "transparent",
-              color: archetypeFilter === name ? "#0f172a" : color,
-              cursor: "pointer",
-              letterSpacing: 0.3,
-            }}
-          >
-            {name}
-          </button>
-        ))}
-        <div style={{ flex: 1 }} />
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            handleDirectSpeak(speechDraft);
-            setSpeechDraft("");
-          }}
-          style={{ display: "flex", gap: 4 }}
-        >
-          <input
-            value={speechDraft}
-            onChange={(e) => setSpeechDraft(e.target.value)}
-            placeholder="Say to nearest…"
-            style={{
-              fontSize: 11,
-              padding: "3px 8px",
-              borderRadius: 6,
-              border: "1px solid #334155",
-              background: "#0f172a",
-              color: "#cfe3ff",
-              width: 160,
-            }}
-          />
-          <button
-            type="submit"
-            style={{
-              fontSize: 11,
-              padding: "3px 8px",
-              borderRadius: 6,
-              border: "1px solid #334155",
-              background: "#1e293b",
-              color: "#cfe3ff",
-              cursor: "pointer",
-            }}
-          >
-            Say
-          </button>
-        </form>
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            handleBroadcast(broadcastDraft);
-            setBroadcastDraft("");
-          }}
-          style={{ display: "flex", gap: 4 }}
-        >
-          <input
-            value={broadcastDraft}
-            onChange={(e) => setBroadcastDraft(e.target.value)}
-            placeholder="Broadcast…"
-            style={{
-              fontSize: 11,
-              padding: "3px 8px",
-              borderRadius: 6,
-              border: "1px solid #334155",
-              background: "#0f172a",
-              color: "#cfe3ff",
-              width: 140,
-            }}
-          />
-          <button
-            type="submit"
-            style={{
-              fontSize: 11,
-              padding: "3px 8px",
-              borderRadius: 6,
-              border: "1px solid #334155",
-              background: "#1e293b",
-              color: "#cfe3ff",
-              cursor: "pointer",
-            }}
-          >
-            📢
-          </button>
-        </form>
-      </div>
 
       <div
         style={{
@@ -784,6 +578,10 @@ export default function App() {
             borderRadius: 8,
             overflow: "hidden",
           }}
+          onMouseMove={(e) => {
+            const rect = e.currentTarget.getBoundingClientRect();
+            setMousePos({ x: e.clientX - rect.left, y: e.clientY - rect.top });
+          }}
         >
           <PixiStage
             width={STAGE_WIDTH}
@@ -796,7 +594,21 @@ export default function App() {
             getSelectedId={getSelectedId}
             getThinkingIds={getThinkingIds}
             onSelect={setSelectedId}
+            getBroadcastFlash={getBroadcastFlash}
+            onHover={setHoveredId}
+            interactRadius={INTERACT_RADIUS}
           />
+          {hoveredId && (() => {
+            const snap = snapshotsRef.current.find((s) => s.id === hoveredId);
+            return snap ? (
+              <HoverPeek
+                name={snap.name}
+                archetype={snap.archetype}
+                mouseX={mousePos.x}
+                mouseY={mousePos.y}
+              />
+            ) : null;
+          })()}
           <ScenarioOverlay
             world={worldRef.current}
             width={STAGE_WIDTH}
@@ -906,8 +718,6 @@ export default function App() {
                 registry={ontologyRef.current.registry}
                 world={worldRef.current}
                 surrealGraph={surrealGraphRef.current}
-                onGiftItem={handleGiftItem}
-                onPinMemory={handlePinMemory}
               />
             )}
             {rightTab === "chat" && (

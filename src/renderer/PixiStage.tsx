@@ -4,34 +4,6 @@ import type { EntitySnapshot } from "../simulation/entity";
 import { ARCHETYPE_COLORS, ARCHETYPE_RADIUS } from "./theme";
 import { pickAnimation, SpriteAtlas } from "./sprite-atlas";
 
-// ── T3 motion constants ──────────────────────────────────────────────────────
-/** Per-frame lerp factor toward simulation position (visual-only). */
-const ENTITY_EASING = 0.15;
-/** Minimum per-frame pixel movement to be considered "walking". */
-const WALK_PIXEL_THRESHOLD = 0.15;
-/** Ms of no movement before idle-fidget kicks in. */
-const IDLE_FIDGET_MS = 5000;
-/** Minimum ms between footstep dust spawns. */
-const FOOTSTEP_INTERVAL_MS = 420;
-/** How long (ms) a single dust particle fades out. */
-const DUST_LIFETIME_MS = 300;
-
-type DustParticle = {
-  gfx: Graphics;
-  spawnMs: number;
-  vx: number;
-  vy: number;
-};
-
-function entityIdHash(id: string): number {
-  let h = 0;
-  for (let i = 0; i < id.length; i++) {
-    h = ((h << 5) - h) + id.charCodeAt(i);
-    h |= 0;
-  }
-  return h;
-}
-
 // Animation state lives next to each entity's gfx. Sprites animate by keeping
 // last-position so we can pick walk-{e,s,w,n} from movement delta, and a
 // frame counter that advances on the manifest's per-anim duration.
@@ -41,9 +13,6 @@ type SpriteAnimState = {
   lastFrameMs: number;
   lastX: number;
   lastY: number;
-  lastMovedMs: number;
-  transitionFrames: number;
-  lastFootstepMs: number;
 };
 
 type EntityGfx = {
@@ -55,8 +24,6 @@ type EntityGfx = {
   group: Container;
   /** Set when body is a Sprite (i.e. atlas had this archetype). */
   sprite?: SpriteAnimState;
-  visualX: number;
-  visualY: number;
 };
 
 export type CameraBounds = { x: number; y: number; w: number; h: number };
@@ -79,6 +46,14 @@ type PixiStageProps = {
   getSelectedId: () => string | null;
   getThinkingIds: () => ReadonlySet<string>;
   onSelect: (id: string | null) => void;
+  // (#15) Camera shake: called each frame to check for a scenario broadcast flash.
+  getBroadcastFlash: () => { color: number; expiresAtTick: number } | undefined;
+  // (#37) Hover-to-peek: fires with the entity id when pointer enters a sprite,
+  // null when it leaves.
+  onHover: (id: string | null) => void;
+  // (#46) Radius around the player within which non-player entities show an
+  // in-range glow ring.
+  interactRadius: number;
 };
 
 // Camera tuning. Dead zone is the centered rectangle in screen coords inside
@@ -87,8 +62,11 @@ type PixiStageProps = {
 // camera position; lower = smoother, higher = snappier (1.0 = instant).
 const CAMERA_LERP = 0.18;
 const CAMERA_DEAD_ZONE_FRAC = 0.3; // 30% of viewport in each axis
-const CAMERA_LOOKAHEAD_FACTOR = 0.3;
-const CAMERA_LOOKAHEAD_MAX = 40;
+
+// Camera shake tuning. Duration (ms) of shake after a broadcastFlash event.
+const SHAKE_DURATION_MS = 200;
+// Peak amplitude (px) at the moment the shake starts; decays linearly to 0.
+const SHAKE_AMPLITUDE_PX = 4;
 
 const LABEL_STYLE = new TextStyle({
   fontFamily: "ui-sans-serif, system-ui",
@@ -114,6 +92,9 @@ export function PixiStage({
   getSelectedId,
   getThinkingIds,
   onSelect,
+  getBroadcastFlash,
+  onHover,
+  interactRadius,
 }: PixiStageProps) {
   const mountRef = useRef<HTMLDivElement | null>(null);
 
@@ -125,6 +106,9 @@ export function PixiStage({
   const cameraTargetIdRef = useRef(cameraTargetId);
   const getCameraBoundsRef = useRef(getCameraBounds);
   const worldDimsRef = useRef({ w: worldWidth, h: worldHeight });
+  const getBroadcastFlashRef = useRef(getBroadcastFlash);
+  const onHoverRef = useRef(onHover);
+  const interactRadiusRef = useRef(interactRadius);
   getSnapshotsRef.current = getSnapshots;
   getSelectedIdRef.current = getSelectedId;
   getThinkingIdsRef.current = getThinkingIds;
@@ -132,6 +116,9 @@ export function PixiStage({
   cameraTargetIdRef.current = cameraTargetId;
   getCameraBoundsRef.current = getCameraBounds;
   worldDimsRef.current = { w: worldWidth, h: worldHeight };
+  getBroadcastFlashRef.current = getBroadcastFlash;
+  onHoverRef.current = onHover;
+  interactRadiusRef.current = interactRadius;
 
   useEffect(() => {
     let app: Application | null = null;
@@ -142,11 +129,14 @@ export function PixiStage({
     // bg-grid, entity groups, selection ring — lives inside it. To pan the
     // camera we mutate worldLayer.position. The viewport is the canvas itself.
     let worldLayer: Container | null = null;
-    let dustLayer: Container | null = null;
     let entityLayer: Container | null = null;
+    let inRangeRings: Graphics | null = null;
     let selectionRing: Graphics | null = null;
     let rafId = 0;
-    const dustParticles: DustParticle[] = [];
+
+    // (#15) Camera shake state. Managed inside the render closure.
+    let shakeUntilMs = 0;
+    let lastFlashExpiresAt = -1;
 
     (async () => {
       app = new Application();
@@ -188,11 +178,13 @@ export function PixiStage({
       bg.stroke({ color: 0x1e293b, width: 1, alpha: 0.4 });
       worldLayer.addChild(bg);
 
-      dustLayer = new Container();
-      worldLayer.addChild(dustLayer);
-
       entityLayer = new Container();
       worldLayer.addChild(entityLayer);
+
+      // (#46) In-range glow rings sit below the selection ring so they never
+      // occlude the active selection indicator.
+      inRangeRings = new Graphics();
+      worldLayer.addChild(inRangeRings);
 
       selectionRing = new Graphics();
       worldLayer.addChild(selectionRing);
@@ -203,12 +195,8 @@ export function PixiStage({
         if (event.target === app!.stage) onSelectRef.current(null);
       });
 
-      // Persistent camera state for lookahead across frames.
-      let prevTargetX = 0;
-      let prevTargetY = 0;
-
       const render = () => {
-        if (destroyed || !app || !entityLayer || !selectionRing || !worldLayer) return;
+        if (destroyed || !app || !entityLayer || !selectionRing || !worldLayer || !inRangeRings) return;
         const snaps = getSnapshotsRef.current();
         const selectedId = getSelectedIdRef.current();
         const thinkingIds = getThinkingIdsRef.current();
@@ -263,14 +251,7 @@ export function PixiStage({
             } else {
               desY = (height - cb.h) / 2 - cb.y;
             }
-            // Camera lookahead: nudge camera ahead of player movement.
-            const lookaheadDx = (target.x - prevTargetX) * CAMERA_LOOKAHEAD_FACTOR;
-            const lookaheadDy = (target.y - prevTargetY) * CAMERA_LOOKAHEAD_FACTOR;
-            prevTargetX = target.x;
-            prevTargetY = target.y;
-            desX += Math.max(-CAMERA_LOOKAHEAD_MAX, Math.min(CAMERA_LOOKAHEAD_MAX, lookaheadDx));
-            desY += Math.max(-CAMERA_LOOKAHEAD_MAX, Math.min(CAMERA_LOOKAHEAD_MAX, lookaheadDy));
-            // Ease toward the final target.
+            // Ease toward the clamped target.
             worldLayer.position.set(
               cx + (desX - cx) * CAMERA_LERP,
               cy + (desY - cy) * CAMERA_LERP,
@@ -278,151 +259,21 @@ export function PixiStage({
           }
         }
 
-        // ── Render entity ─ extracted from the RAF loop ──────────────────
-        const renderEntity = (s: EntitySnapshot, g: EntityGfx): void => {
-          g.visualX += (s.x - g.visualX) * ENTITY_EASING;
-          g.visualY += (s.y - g.visualY) * ENTITY_EASING;
-          g.group.position.set(g.visualX, g.visualY);
-
-          const bobOffset = Math.sin(now / 800 + entityIdHash(s.id) * 0.5) * 1.5;
-          g.group.y += bobOffset;
-
-          const { w: bW, h: bH } = worldDimsRef.current;
-          if (s.x <= 10 || s.x >= bW - 10 || s.y <= 10 || s.y >= bH - 10) {
-            g.group.x += Math.sin(now / 100) * 2;
-          }
-
-          if (g.sprite && atlas && g.body instanceof Sprite) {
-            const ss = g.sprite;
-            const dx = s.x - ss.lastX;
-            const dy = s.y - ss.lastY;
-            const dist = Math.sqrt(dx * dx + dy * dy);
-            const isMoving = dist > WALK_PIXEL_THRESHOLD;
-            const desired = pickAnimation(dx, dy);
-
-            if (isMoving) {
-              ss.lastMovedMs = now;
-            }
-
-            if (desired !== ss.animName) {
-              if (desired === "idle") {
-                ss.transitionFrames = 2;
-              } else {
-                ss.frameIdx = 0;
-              }
-              ss.animName = desired;
-              ss.lastFrameMs = now;
-            }
-
-            const anim = atlas.animation(ss.animName);
-            if (anim) {
-              if (now - ss.lastFrameMs >= anim.frameDurationMs) {
-                if (ss.transitionFrames > 0) {
-                  ss.frameIdx = Math.max(ss.frameIdx - 1, 0);
-                  ss.transitionFrames--;
-                } else {
-                  const advance = Math.floor(
-                    (now - ss.lastFrameMs) / anim.frameDurationMs,
-                  );
-                  ss.frameIdx = (ss.frameIdx + advance) % anim.frames;
-                }
-                ss.lastFrameMs = now;
-              }
-              const tex = atlas.frameTexture(
-                s.archetype,
-                ss.animName,
-                ss.frameIdx,
-              );
-              if (tex) g.body.texture = tex;
-            }
-
-            if (!isMoving && now - ss.lastMovedMs > IDLE_FIDGET_MS) {
-              const wobble = Math.sin(now / 2000 + entityIdHash(s.id) * 3.7);
-              if (wobble > 0.95) {
-                g.group.y -= 1.5;
-              }
-            }
-
-            if (isMoving && now - ss.lastFootstepMs >= FOOTSTEP_INTERVAL_MS) {
-              ss.lastFootstepMs = now;
-              if (dustLayer) {
-                const count = 1 + (entityIdHash(s.id) % 3);
-                for (let i = 0; i < count; i++) {
-                  const p = new Graphics();
-                  p.circle(0, 0, 0.5 + Math.random() * 0.5).fill({
-                    color: 0x94a3b8,
-                    alpha: 0.6,
-                  });
-                  p.position.set(
-                    g.group.x + (Math.random() - 0.5) * 6,
-                    g.group.y + 3 + (Math.random() - 0.5) * 2,
-                  );
-                  dustLayer.addChild(p);
-                  dustParticles.push({
-                    gfx: p,
-                    spawnMs: now,
-                    vx: (Math.random() - 0.5) * 0.3,
-                    vy: Math.random() * 0.2 + 0.1,
-                  });
-                }
-              }
-            }
-
-            ss.lastX = s.x;
-            ss.lastY = s.y;
-          }
-
-          const isSprite = g.body instanceof Sprite;
-          const overlayBaseY = isSprite ? 6 : ARCHETYPE_RADIUS[s.archetype] + 3;
-          const labelY = isSprite ? 10 : ARCHETYPE_RADIUS[s.archetype] + 7;
-
-          g.energyBar.clear();
-          const barW = 14;
-          g.energyBar.rect(-barW / 2, overlayBaseY, barW, 2).fill({ color: 0x334155 });
-          let energyColor: number;
-          if (s.energy < 0.3) {
-            const t = s.energy / 0.3;
-            const er = Math.round(0xe7 + (0xf3 - 0xe7) * t);
-            const eg = Math.round(0x4c + (0x9c - 0x4c) * t);
-            const eb = Math.round(0x3c + (0x12 - 0x3c) * t);
-            energyColor = (er << 16) | (eg << 8) | eb;
-          } else if (s.energy < 0.7) {
-            const t = (s.energy - 0.3) / 0.4;
-            const er = Math.round(0xf3 + (0x34 - 0xf3) * t);
-            const eg = Math.round(0x9c + (0xd3 - 0x9c) * t);
-            const eb = Math.round(0x12 + (0x99 - 0x12) * t);
-            energyColor = (er << 16) | (eg << 8) | eb;
-          } else {
-            energyColor = 0x34d399;
-          }
-          g.energyBar.rect(-barW / 2, overlayBaseY, barW * s.energy, 2).fill({ color: energyColor });
-
-          g.label.position.set(0, labelY);
-          if (g.label.text !== s.name) g.label.text = s.name;
-
-          const headTopY = isSprite ? -28 : -ARCHETYPE_RADIUS[s.archetype] - 6;
-
-          if (s.speechBubble) {
-            if (g.bubble.text !== s.speechBubble) g.bubble.text = s.speechBubble;
-            g.bubble.position.set(0, headTopY);
-            g.bubble.visible = true;
-          } else {
-            g.bubble.visible = false;
-          }
-
-          if (thinkingIds.has(s.id)) {
-            g.thinking.visible = true;
-            g.thinking.clear();
-            const pulse = 0.6 + 0.4 * Math.abs(Math.sin(now / 250));
-            const ty = headTopY - 8;
-            g.thinking.circle(0, ty, 2.5).fill({ color: 0xa855f7, alpha: pulse });
-            g.thinking.circle(5, ty, 2).fill({ color: 0xa855f7, alpha: pulse * 0.7 });
-            g.thinking.circle(-5, ty, 2).fill({ color: 0xa855f7, alpha: pulse * 0.7 });
-          } else if (g.thinking.visible) {
-            g.thinking.visible = false;
-            g.thinking.clear();
-          }
-        };
+        // (#15) Camera shake: triggered by broadcastFlash. Each time we see a
+        // new expiresAtTick value we start a fresh SHAKE_DURATION_MS burst.
+        // Amplitude decays linearly to zero so the shake smoothly settles.
+        const flash = getBroadcastFlashRef.current();
+        if (flash && flash.expiresAtTick !== lastFlashExpiresAt) {
+          lastFlashExpiresAt = flash.expiresAtTick;
+          shakeUntilMs = now + SHAKE_DURATION_MS;
+        }
+        if (now < shakeUntilMs) {
+          const decay = (shakeUntilMs - now) / SHAKE_DURATION_MS;
+          const sx = (Math.random() - 0.5) * SHAKE_AMPLITUDE_PX * 2 * decay;
+          const sy = (Math.random() - 0.5) * SHAKE_AMPLITUDE_PX * 2 * decay;
+          worldLayer.position.x += sx;
+          worldLayer.position.y += sy;
+        }
 
         for (const s of snaps) {
           seen.add(s.id);
@@ -448,9 +299,6 @@ export function PixiStage({
                 lastFrameMs: now,
                 lastX: s.x,
                 lastY: s.y,
-                lastMovedMs: now,
-                transitionFrames: 0,
-                lastFootstepMs: 0,
               };
             } else {
               const color = ARCHETYPE_COLORS[s.archetype];
@@ -466,6 +314,10 @@ export function PixiStage({
               ev.stopPropagation();
               onSelectRef.current(id);
             });
+            // (#37) Hover-to-peek: notify App of which entity the pointer is
+            // over so a name/archetype tooltip can be rendered in React.
+            body.on("pointerover", () => onHoverRef.current(id));
+            body.on("pointerout", () => onHoverRef.current(null));
 
             const energyBar = new Graphics();
             const label = new Text({ text: s.name, style: LABEL_STYLE });
@@ -487,10 +339,80 @@ export function PixiStage({
             group.addChild(thinking);
             entityLayer.addChild(group);
 
-            g = { body, energyBar, bubble, label, thinking, group, sprite: spriteState, visualX: s.x, visualY: s.y };
+            g = { body, energyBar, bubble, label, thinking, group, sprite: spriteState };
             gfx.set(s.id, g);
           }
-          renderEntity(s, g);
+          g.group.position.set(s.x, s.y);
+
+          // Sprite animation: pick anim from movement delta, advance frame on
+          // the manifest's per-anim duration. Sprites use a different vertical
+          // offset from circles, so the energy bar / label use a sprite-aware
+          // baseline below.
+          if (g.sprite && atlas && g.body instanceof Sprite) {
+            const ss = g.sprite;
+            const dx = s.x - ss.lastX;
+            const dy = s.y - ss.lastY;
+            const desired = pickAnimation(dx, dy);
+            const anim = atlas.animation(desired);
+            if (anim) {
+              if (desired !== ss.animName) {
+                ss.animName = desired;
+                ss.frameIdx = 0;
+                ss.lastFrameMs = now;
+              } else if (now - ss.lastFrameMs >= anim.frameDurationMs) {
+                const advance = Math.floor((now - ss.lastFrameMs) / anim.frameDurationMs);
+                ss.frameIdx = (ss.frameIdx + advance) % anim.frames;
+                ss.lastFrameMs = now;
+              }
+              const tex = atlas.frameTexture(s.archetype, ss.animName, ss.frameIdx);
+              if (tex) g.body.texture = tex;
+            }
+            ss.lastX = s.x;
+            ss.lastY = s.y;
+          }
+
+          // UI overlays sit relative to the character's visual bottom. For a
+          // 32px sprite anchored at (0.5, 0.85) the feet are ~5px below
+          // origin; for circles use the legacy radius-based offset.
+          const isSprite = g.body instanceof Sprite;
+          const overlayBaseY = isSprite ? 6 : ARCHETYPE_RADIUS[s.archetype] + 3;
+          const labelY = isSprite ? 10 : ARCHETYPE_RADIUS[s.archetype] + 7;
+
+          g.energyBar.clear();
+          const barW = 14;
+          g.energyBar.rect(-barW / 2, overlayBaseY, barW, 2).fill({ color: 0x334155 });
+          g.energyBar.rect(-barW / 2, overlayBaseY, barW * s.energy, 2).fill({ color: 0x34d399 });
+
+          g.label.position.set(0, labelY);
+          if (g.label.text !== s.name) g.label.text = s.name;
+
+          // Speech-bubble / thinking indicator anchor: above the head. For
+          // sprites that's roughly -28 above the entity origin (sprite stands
+          // 32 px tall and is anchored 0.85 from the top); for circles it's
+          // the negated radius.
+          const headTopY = isSprite ? -28 : -ARCHETYPE_RADIUS[s.archetype] - 6;
+
+          if (s.speechBubble) {
+            if (g.bubble.text !== s.speechBubble) g.bubble.text = s.speechBubble;
+            g.bubble.position.set(0, headTopY);
+            g.bubble.visible = true;
+          } else {
+            g.bubble.visible = false;
+          }
+
+          // T3 "thinking" indicator: a pulsing purple dot above the entity.
+          if (thinkingIds.has(s.id)) {
+            g.thinking.visible = true;
+            g.thinking.clear();
+            const pulse = 0.6 + 0.4 * Math.abs(Math.sin(now / 250));
+            const ty = headTopY - 8;
+            g.thinking.circle(0, ty, 2.5).fill({ color: 0xa855f7, alpha: pulse });
+            g.thinking.circle(5, ty, 2).fill({ color: 0xa855f7, alpha: pulse * 0.7 });
+            g.thinking.circle(-5, ty, 2).fill({ color: 0xa855f7, alpha: pulse * 0.7 });
+          } else if (g.thinking.visible) {
+            g.thinking.visible = false;
+            g.thinking.clear();
+          }
         }
 
         for (const [id, g] of gfx) {
@@ -500,32 +422,38 @@ export function PixiStage({
           }
         }
 
+        // (#46) In-range indicator: subtle cyan glow ring around non-player
+        // entities within interactRadius of the player. Redrawn each frame.
+        inRangeRings.clear();
+        const playerSnap = snaps.find((s) => s.archetype === "Player");
+        if (playerSnap) {
+          const ir = interactRadiusRef.current;
+          const ir2 = ir * ir;
+          for (const s of snaps) {
+            if (s.archetype === "Player") continue;
+            const dx = s.x - playerSnap.x;
+            const dy = s.y - playerSnap.y;
+            if (dx * dx + dy * dy <= ir2) {
+              const eGfx = gfx.get(s.id);
+              const eIsSprite = eGfx?.body instanceof Sprite;
+              const ringR = (eIsSprite ? 14 : ARCHETYPE_RADIUS[s.archetype] + 4) + 4;
+              inRangeRings
+                .circle(s.x, s.y, ringR)
+                .stroke({ color: 0x22d3ee, width: 1.5, alpha: 0.35 });
+            }
+          }
+        }
+
         selectionRing.clear();
         if (selectedId) {
           const sel = snaps.find((s) => s.id === selectedId);
           if (sel) {
             const selGfx = gfx.get(sel.id);
             const isSprite = selGfx?.body instanceof Sprite;
-            const baseRadius = isSprite ? 14 : ARCHETYPE_RADIUS[sel.archetype] + 4;
-            const ringPulse = 0.4 + 0.6 * Math.abs(Math.sin(now / 250));
-            const radius = baseRadius + Math.sin(now / 400) * 1.5;
+            const radius = isSprite ? 14 : ARCHETYPE_RADIUS[sel.archetype] + 4;
             selectionRing
               .circle(sel.x, sel.y, radius)
-              .stroke({ color: 0xffffff, width: 2, alpha: ringPulse });
-          }
-        }
-
-        // Age dust particles: fade alpha, drift with velocity, remove expired.
-        for (let i = dustParticles.length - 1; i >= 0; i--) {
-          const dp = dustParticles[i];
-          const age = now - dp.spawnMs;
-          if (age >= DUST_LIFETIME_MS) {
-            dp.gfx.destroy();
-            dustParticles.splice(i, 1);
-          } else {
-            dp.gfx.alpha = 0.6 * (1 - age / DUST_LIFETIME_MS);
-            dp.gfx.position.x += dp.vx;
-            dp.gfx.position.y += dp.vy;
+              .stroke({ color: 0xffffff, width: 2, alpha: 0.9 });
           }
         }
 

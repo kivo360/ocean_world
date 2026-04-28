@@ -12,7 +12,6 @@ import {
   entityActivity,
   findNearby,
   getEntity,
-  regionIdOf,
   type EntityActivity,
   type World,
 } from "./world";
@@ -36,13 +35,6 @@ const T3_FORCE_INTERVAL_TICKS = 80;
 const AMBIENT_TICK_INTERVAL = 10;
 
 const SPEECH_BUBBLE_LIFETIME = 4;
-
-// Behavior cooldown: prevent repeating same behavior every tick
-const BEHAVIOR_COOLDOWN_TICKS = 3;
-
-// Recency weighting: bias toward behaviors not done recently
-const RECENCY_COOLDOWN_PERIOD = 5;
-const RECENCY_BONUS = 0.3;
 
 function entityIdHash(id: string): number {
   let h = 0;
@@ -93,7 +85,6 @@ const T1_LOCKED_PHASES: Partial<Record<BehaviorName, Set<string>>> = {
   Rest: new Set(["Resting"]),
   MarkPrice: new Set(["Quoting"]),
   EnforcePolicy: new Set(["Investigating", "Levying"]),
-  MerchantCoordination: new Set(["Trading"]),
 };
 
 function valueWeight(values: Values, behavior: BehaviorName): number {
@@ -110,14 +101,6 @@ function valueWeight(values: Values, behavior: BehaviorName): number {
       return 0.5 + 0.5 * values.profit;
     case "EnforcePolicy":
       return 0.5 + 0.5 * values.fairness;
-    case "GroupUp":
-      return 0.5 + 0.5 * values.community;
-    case "AvoidLawkeepers":
-      return 0.5 + 0.5 * (1 - values.fairness);
-    case "PursueViolators":
-      return 0.5 + 0.5 * values.fairness;
-    case "MerchantCoordination":
-      return 0.5 + 0.5 * values.profit;
   }
 }
 
@@ -151,34 +134,10 @@ export function evaluateBehavior(
   type Scored = { name: BehaviorName; score: number };
   const scores: Scored[] = [];
   for (const name of entity.behaviors) {
-    // Behavior cooldown check: skip if on cooldown
-    const cooldownExpiry = entity.cooldowns[name];
-    if (cooldownExpiry !== undefined && world.tick < cooldownExpiry) {
-      continue;
-    }
-
     const mod = registry[name];
     const raw = mod.score(entity, world);
     const weight = values ? valueWeight(values, name) : 1;
-
-    // Memory recency weighting: bias toward behaviors not done recently
-    const lastTick = entity.lastBehaviorTick[name];
-    let recencyMultiplier = 1;
-    if (lastTick !== undefined) {
-      const ticksSinceLast = world.tick - lastTick;
-      const recencyFactor = Math.max(0, 1 - ticksSinceLast / RECENCY_COOLDOWN_PERIOD);
-      recencyMultiplier = 1 + RECENCY_BONUS * recencyFactor;
-    } else {
-      // Never done this behavior: maximum recency bonus
-      recencyMultiplier = 1 + RECENCY_BONUS;
-    }
-
-    // Mood modifier: mood (0-1) multiplies score by (0.5 + mood).
-    // Low mood (0) halves scores; high mood (1) multiplies by 1.5.
-    const mood = entity.components.cognitive?.mood ?? 0.5;
-    const moodMultiplier = 0.5 + mood;
-
-    scores.push({ name, score: raw * weight * recencyMultiplier * moodMultiplier });
+    scores.push({ name, score: raw * weight });
   }
   scores.sort((a, b) => b.score - a.score);
   const best = scores[0]!;
@@ -203,28 +162,6 @@ function decide(
   ambientFrame: boolean,
 ): Action[] {
   const actions: Action[] = [];
-
-  // T3 regional budget/backpressure: pre-count active entities per region
-  const regionActiveCounts = new Map<string, number>();
-  for (const entity of world.entities.values()) {
-    if (entity.archetype === "Player") continue;
-    const mode = entityActivity(world, entity, ambientFrame);
-    if (mode === "frozen") continue;
-    const regionId = regionIdOf(world, entity);
-    if (regionId) {
-      regionActiveCounts.set(regionId, (regionActiveCounts.get(regionId) ?? 0) + 1);
-    }
-  }
-
-  // Calculate per-region T3 budget cap
-  const regionT3Budget = new Map<string, number>();
-  for (const [regionId, count] of regionActiveCounts) {
-    regionT3Budget.set(regionId, Math.max(3, Math.floor(count * 0.3)));
-  }
-
-  // Track T3 queueings per region this tick
-  const regionT3Queued = new Map<string, number>();
-
   for (const entity of world.entities.values()) {
     // Player is input-driven; movement is mutated directly from the UI between
     // ticks. Skip T1/T2/T3 entirely so the player never gets a behavior queued.
@@ -245,10 +182,6 @@ function decide(
 
     const choice = evaluateBehavior(entity, world, registry);
     entity.activeBehavior = choice.behavior;
-
-    // Set behavior cooldown and track last performed tick
-    entity.cooldowns[choice.behavior] = world.tick + BEHAVIOR_COOLDOWN_TICKS;
-    entity.lastBehaviorTick[choice.behavior] = world.tick;
 
     // Ontology guardrail: verify the entity actually satisfies the chosen
     // behavior's required_components. Defense-in-depth — build-time validation
@@ -280,27 +213,15 @@ function decide(
     }
 
     if (choice.needsT3 && allowT3 && t3Queue) {
-      // Check T3 regional budget before queueing
-      const regionId = regionIdOf(world, entity);
-      const t3Queued = regionId ? (regionT3Queued.get(regionId) ?? 0) : 0;
-      const t3Budget = regionId ? (regionT3Budget.get(regionId) ?? Infinity) : Infinity;
-
-      if (t3Queued < t3Budget) {
-        // Within budget: queue for T3
-        if (regionId) {
-          regionT3Queued.set(regionId, t3Queued + 1);
-        }
-        t3Queue.queue(entity.id);
-        emit(world, {
-          kind: "needs_deliberation",
-          source: entity.id,
-          summary: `T2 score ${choice.score.toFixed(3)} < threshold; queued for T3`,
-        });
-        // While we wait, fall back to the best T2 action so ticks stay alive.
-        actions.push(registry[choice.behavior].decide(entity, world));
-        continue;
-      }
-      // Budget exceeded: fall through to T2 action directly
+      t3Queue.queue(entity.id);
+      emit(world, {
+        kind: "needs_deliberation",
+        source: entity.id,
+        summary: `T2 score ${choice.score.toFixed(3)} < threshold; queued for T3`,
+      });
+      // While we wait, fall back to the best T2 action so ticks stay alive.
+      actions.push(registry[choice.behavior].decide(entity, world));
+      continue;
     }
 
     actions.push(registry[choice.behavior].decide(entity, world));
@@ -546,36 +467,7 @@ function passiveDecay(world: World, ambientFrame: boolean): void {
     const p = entity.components.physical;
     if (!p) continue;
     p.energy = Math.max(0, p.energy - 0.002);
-
-    // Mood decay: drift toward neutral (0.5) each tick.
-    const cog = entity.components.cognitive;
-    if (cog && cog.mood !== undefined) {
-      if (cog.mood > 0.5) cog.mood = Math.max(0.5, cog.mood - 0.01);
-      else if (cog.mood < 0.5) cog.mood = Math.min(0.5, cog.mood + 0.01);
-    }
-
-    // Long-term savings: draw from savings to buy food when energy is low
-    const f = entity.components.financial;
-    if (p.energy < 0.3 && f && f.savings > 0) {
-      const draw = Math.min(f.savings, 2);
-      f.savings -= draw;
-      p.energy = Math.min(1, p.energy + draw * 0.15);
-    }
   }
-
-  // Every 10 ticks: entities save toward long-term goals
-  if (world.tick % 10 === 0) {
-    for (const entity of world.entities.values()) {
-      if (entity.archetype === "Player") continue;
-      const f = entity.components.financial;
-      if (!f) continue;
-      const amount = world.rng.int(1, 3);
-      const actual = Math.min(amount, f.money);
-      f.money -= actual;
-      f.savings += actual;
-    }
-  }
-
   // Garbage-collect expired speech bubbles.
   for (const [id, bubble] of world.speechBubbles) {
     if (bubble.expiresAtTick < world.tick) world.speechBubbles.delete(id);
@@ -620,7 +512,5 @@ export function runTick(
   // active-region NPCs get queued (allowT3 gate in decide), so this never
   // fires LLM calls for ambient regions.
   if (t3Queue) t3Queue.beginBatch(world);
-  // Snapshot for deterministic replay if a recorder is attached.
-  if (world.replayRecorder) world.replayRecorder.record(world);
   return world.events.slice(-50);
 }

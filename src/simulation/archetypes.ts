@@ -16,7 +16,7 @@ type ArchetypeSpec = {
 
 const ARCHETYPES: Record<Archetype, ArchetypeSpec> = {
   Person: {
-    behaviors: ["Wander", "Converse", "Trade", "Rest", "GroupUp", "AvoidLawkeepers"],
+    behaviors: ["Wander", "Converse", "Trade", "Rest"],
     baseEnergy: 0.8,
     baseMoney: 50,
     baseGoods: 2,
@@ -32,7 +32,7 @@ const ARCHETYPES: Record<Archetype, ArchetypeSpec> = {
     nameRoots: ["Ana", "Beto", "Carmen", "Diego", "Elena", "Felipe", "Gabi", "Hugo", "Ines", "Julio"],
   },
   Merchant: {
-    behaviors: ["Trade", "Converse", "Rest", "AvoidLawkeepers", "MerchantCoordination"],
+    behaviors: ["Trade", "Converse", "Rest"],
     baseEnergy: 0.9,
     baseMoney: 200,
     baseGoods: 12,
@@ -48,7 +48,7 @@ const ARCHETYPES: Record<Archetype, ArchetypeSpec> = {
     nameRoots: ["Otilia", "Paco", "Queta", "Ramon", "Sofia", "Tomas"],
   },
   Wanderer: {
-    behaviors: ["Wander", "Converse", "Rest", "GroupUp", "AvoidLawkeepers"],
+    behaviors: ["Wander", "Converse", "Rest"],
     baseEnergy: 1.0,
     baseMoney: 10,
     baseGoods: 1,
@@ -80,7 +80,7 @@ const ARCHETYPES: Record<Archetype, ArchetypeSpec> = {
     nameRoots: ["Marek", "Nadia", "Osvaldo", "Petra"],
   },
   Lawkeeper: {
-    behaviors: ["EnforcePolicy", "Wander", "Converse", "Rest", "PursueViolators"],
+    behaviors: ["EnforcePolicy", "Wander", "Converse", "Rest"],
     baseEnergy: 0.9,
     baseMoney: 100,
     baseGoods: 0,
@@ -162,12 +162,10 @@ export function spawnEntity(opts: {
         values,
         attentionFocus: null,
         workingMemoryLoad: 0,
-        mood: 0.5,
       },
       financial: {
         money: spec.baseMoney + opts.rng.int(-10, 10),
         goods: spec.baseGoods,
-        savings: 0,
       },
       inventory: { items: {} },
       memory: { recent: [] },
@@ -181,15 +179,9 @@ export function spawnEntity(opts: {
       Rest: undefined,
       MarkPrice: undefined,
       EnforcePolicy: undefined,
-      GroupUp: undefined,
-      AvoidLawkeepers: undefined,
-      PursueViolators: undefined,
-      MerchantCoordination: undefined,
     },
     activeBehavior: spec.behaviors[0]!,
     createdTick: opts.tick,
-    lastBehaviorTick: {},
-    cooldowns: {},
   };
   return entity;
 }
@@ -221,7 +213,7 @@ export function spawnPlayer(opts: {
       perceived: { nearbyIds: [], incomingSpeech: [], tradeOffers: [] },
       // Starting wallet so the player can accept Merchant offers. Goods
       // accumulate as they buy and could later be sold back.
-      financial: { money: 100, goods: 0, savings: 0 },
+      financial: { money: 100, goods: 0 },
     },
     behaviors: [],
     state: {
@@ -231,15 +223,9 @@ export function spawnPlayer(opts: {
       Rest: undefined,
       MarkPrice: undefined,
       EnforcePolicy: undefined,
-      GroupUp: undefined,
-      AvoidLawkeepers: undefined,
-      PursueViolators: undefined,
-      MerchantCoordination: undefined,
     },
     // Placeholder — decide() short-circuits before reading this for players.
     activeBehavior: "Wander",
     createdTick: opts.tick,
-    lastBehaviorTick: {},
-    cooldowns: {},
   };
 }
