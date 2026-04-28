@@ -14,7 +14,11 @@ export type BehaviorName =
   | "Converse"
   | "Rest"
   | "MarkPrice"
-  | "EnforcePolicy";
+  | "EnforcePolicy"
+  | "GroupUp"
+  | "AvoidLawkeepers"
+  | "PursueViolators"
+  | "MerchantCoordination";
 
 export type BehaviorState = {
   name: BehaviorName;

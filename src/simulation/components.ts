@@ -22,6 +22,7 @@ export type CognitiveState = {
   values: Values;
   attentionFocus: string | null;
   workingMemoryLoad: number;
+  mood: number; // 0-1, 0.5 neutral. Biases behavior scores.
 };
 
 export type FinancialState = {

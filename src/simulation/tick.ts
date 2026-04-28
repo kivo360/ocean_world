@@ -93,6 +93,7 @@ const T1_LOCKED_PHASES: Partial<Record<BehaviorName, Set<string>>> = {
   Rest: new Set(["Resting"]),
   MarkPrice: new Set(["Quoting"]),
   EnforcePolicy: new Set(["Investigating", "Levying"]),
+  MerchantCoordination: new Set(["Trading"]),
 };
 
 function valueWeight(values: Values, behavior: BehaviorName): number {
@@ -109,6 +110,14 @@ function valueWeight(values: Values, behavior: BehaviorName): number {
       return 0.5 + 0.5 * values.profit;
     case "EnforcePolicy":
       return 0.5 + 0.5 * values.fairness;
+    case "GroupUp":
+      return 0.5 + 0.5 * values.community;
+    case "AvoidLawkeepers":
+      return 0.5 + 0.5 * (1 - values.fairness);
+    case "PursueViolators":
+      return 0.5 + 0.5 * values.fairness;
+    case "MerchantCoordination":
+      return 0.5 + 0.5 * values.profit;
   }
 }
 
@@ -164,7 +173,12 @@ export function evaluateBehavior(
       recencyMultiplier = 1 + RECENCY_BONUS;
     }
 
-    scores.push({ name, score: raw * weight * recencyMultiplier });
+    // Mood modifier: mood (0-1) multiplies score by (0.5 + mood).
+    // Low mood (0) halves scores; high mood (1) multiplies by 1.5.
+    const mood = entity.components.cognitive?.mood ?? 0.5;
+    const moodMultiplier = 0.5 + mood;
+
+    scores.push({ name, score: raw * weight * recencyMultiplier * moodMultiplier });
   }
   scores.sort((a, b) => b.score - a.score);
   const best = scores[0]!;
@@ -532,6 +546,13 @@ function passiveDecay(world: World, ambientFrame: boolean): void {
     const p = entity.components.physical;
     if (!p) continue;
     p.energy = Math.max(0, p.energy - 0.002);
+
+    // Mood decay: drift toward neutral (0.5) each tick.
+    const cog = entity.components.cognitive;
+    if (cog && cog.mood !== undefined) {
+      if (cog.mood > 0.5) cog.mood = Math.max(0.5, cog.mood - 0.01);
+      else if (cog.mood < 0.5) cog.mood = Math.min(0.5, cog.mood + 0.01);
+    }
 
     // Long-term savings: draw from savings to buy food when energy is low
     const f = entity.components.financial;
