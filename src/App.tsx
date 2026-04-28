@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { PLAYER_ID, spawnPlayer } from "./simulation/archetypes";
+import type { Archetype } from "./simulation/entity";
 import {
   findNearestInteractTarget,
   pendingPlayerOffer,
@@ -66,6 +67,16 @@ const INTERACT_KEYS = new Set(["e", "E"]);
 const ACCEPT_KEYS = new Set(["y", "Y"]);
 const INTERACT_COOLDOWN_MS = 400;
 const INTERACT_RADIUS = 80;
+const BROADCAST_RADIUS = 200;
+const DAY_CYCLE_TICKS = 240;
+
+const ARCHETYPE_LEGEND: ReadonlyArray<{ name: Archetype; color: string }> = [
+  { name: "Person", color: "#7dd3fc" },
+  { name: "Merchant", color: "#fbbf24" },
+  { name: "Wanderer", color: "#a78bfa" },
+  { name: "MarketMaker", color: "#f472b6" },
+  { name: "Lawkeeper", color: "#4ade80" },
+];
 // Short, friendly. NPCs respond via Converse so meaning matters less than
 // having varied openers — repeating the same line every time gets stale.
 const PLAYER_GREETINGS = [
@@ -151,6 +162,7 @@ export default function App() {
   );
   const snapshotsRef = useRef<readonly EntitySnapshot[]>(snapshot(worldRef.current));
   const keysHeldRef = useRef<Set<string>>(new Set());
+  const shiftHeldRef = useRef(false);
   const lastInteractAtRef = useRef(0);
   const menuTargetIdRef = useRef<string | null>(null);
 
@@ -171,6 +183,10 @@ export default function App() {
   const [rightTab, setRightTab] = useState<"inspector" | "chat" | "deliberations">("inspector");
   const [menuTargetId, setMenuTargetId] = useState<string | null>(null);
   menuTargetIdRef.current = menuTargetId;
+
+  const [archetypeFilter, setArchetypeFilter] = useState<Archetype | null>(null);
+  const [speechDraft, setSpeechDraft] = useState("");
+  const [broadcastDraft, setBroadcastDraft] = useState("");
 
   // Refs for callbacks so the effect only runs on width/height change.
   const getSnapshots = useCallback(() => snapshotsRef.current, []);
@@ -227,6 +243,9 @@ export default function App() {
   useEffect(() => {
     const held = keysHeldRef.current;
     const onKeyDown = (e: KeyboardEvent) => {
+      const focused = document.activeElement as HTMLElement | null;
+      if (focused?.tagName === "INPUT" || focused?.tagName === "TEXTAREA") return;
+      if (e.key === "Shift") { shiftHeldRef.current = true; return; }
       // Menu hotkeys take priority while it's open.
       if (menuTargetIdRef.current) {
         if (e.key === "Escape") {
@@ -285,9 +304,10 @@ export default function App() {
       if (e.key.startsWith("Arrow")) e.preventDefault();
     };
     const onKeyUp = (e: KeyboardEvent) => {
+      if (e.key === "Shift") shiftHeldRef.current = false;
       held.delete(e.key);
     };
-    const onBlur = () => held.clear();
+    const onBlur = () => { held.clear(); shiftHeldRef.current = false; };
     window.addEventListener("keydown", onKeyDown);
     window.addEventListener("keyup", onKeyUp);
     window.addEventListener("blur", onBlur);
@@ -322,7 +342,8 @@ export default function App() {
         const p = player?.components.physical;
         if (p) {
           const len = Math.hypot(dx, dy);
-          const move = PLAYER_SPEED_PX_PER_SEC * dt;
+          const speedMul = shiftHeldRef.current ? 2 : 1;
+          const move = PLAYER_SPEED_PX_PER_SEC * dt * speedMul;
           p.x += (dx / len) * move;
           p.y += (dy / len) * move;
           const b = worldRef.current.bounds;
@@ -491,6 +512,41 @@ export default function App() {
     [],
   );
 
+  const handleDirectSpeak = useCallback((msg: string) => {
+    if (!msg.trim()) return;
+    const w = worldRef.current;
+    const targetId = findNearestInteractTarget(w, INTERACT_RADIUS);
+    if (targetId) {
+      playerSpeak(w, targetId, msg.trim());
+      snapshotsRef.current = snapshot(w);
+      setRenderTick((t) => t + 1);
+    }
+  }, []);
+
+  const handleBroadcast = useCallback((msg: string) => {
+    if (!msg.trim()) return;
+    const w = worldRef.current;
+    const player = w.entities.get(PLAYER_ID);
+    const pp = player?.components.physical;
+    if (!pp) return;
+    let spoke = false;
+    for (const [id, entity] of w.entities) {
+      if (id === PLAYER_ID) continue;
+      const ep = entity.components.physical;
+      if (!ep) continue;
+      const dx = pp.x - ep.x;
+      const dy = pp.y - ep.y;
+      if (dx * dx + dy * dy <= BROADCAST_RADIUS * BROADCAST_RADIUS) {
+        playerSpeak(w, id, msg.trim());
+        spoke = true;
+      }
+    }
+    if (spoke) {
+      snapshotsRef.current = snapshot(w);
+      setRenderTick((t) => t + 1);
+    }
+  }, []);
+
   const t3Stats = t3QueueRef.current.size();
 
   return (
@@ -538,8 +594,20 @@ export default function App() {
               {activeRegionName}
             </div>
           )}
+          <div
+            style={{
+              fontSize: 11,
+              padding: "3px 8px",
+              borderRadius: 999,
+              background: "#1e293b",
+              color: worldRef.current.tick % DAY_CYCLE_TICKS < DAY_CYCLE_TICKS / 2 ? "#fbbf24" : "#a78bfa",
+              letterSpacing: 0.4,
+            }}
+          >
+            {worldRef.current.tick % DAY_CYCLE_TICKS < DAY_CYCLE_TICKS / 2 ? "☀️ Day" : "🌙 Night"} · t{worldRef.current.tick}
+          </div>
           <div style={{ fontSize: 11, opacity: 0.5 }}>
-            WASD/arrows · E greet · Y accept · click to inspect
+            WASD/arrows · Shift sprint · E greet · Y accept · click to inspect
           </div>
         </div>
       </header>
@@ -558,6 +626,110 @@ export default function App() {
         onReset={reset}
         onToggleT3={() => setT3UseEnabled((v) => !v)}
       />
+
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 12,
+          padding: "4px 2px",
+          flexWrap: "wrap",
+        }}
+      >
+        {ARCHETYPE_LEGEND.map(({ name, color }) => (
+          <button
+            key={name}
+            onClick={() => setArchetypeFilter((prev) => (prev === name ? null : name))}
+            style={{
+              fontSize: 11,
+              padding: "3px 10px",
+              borderRadius: 999,
+              border: `1px solid ${color}`,
+              background: archetypeFilter === name ? color : "transparent",
+              color: archetypeFilter === name ? "#0f172a" : color,
+              cursor: "pointer",
+              letterSpacing: 0.3,
+            }}
+          >
+            {name}
+          </button>
+        ))}
+        <div style={{ flex: 1 }} />
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            handleDirectSpeak(speechDraft);
+            setSpeechDraft("");
+          }}
+          style={{ display: "flex", gap: 4 }}
+        >
+          <input
+            value={speechDraft}
+            onChange={(e) => setSpeechDraft(e.target.value)}
+            placeholder="Say to nearest…"
+            style={{
+              fontSize: 11,
+              padding: "3px 8px",
+              borderRadius: 6,
+              border: "1px solid #334155",
+              background: "#0f172a",
+              color: "#cfe3ff",
+              width: 160,
+            }}
+          />
+          <button
+            type="submit"
+            style={{
+              fontSize: 11,
+              padding: "3px 8px",
+              borderRadius: 6,
+              border: "1px solid #334155",
+              background: "#1e293b",
+              color: "#cfe3ff",
+              cursor: "pointer",
+            }}
+          >
+            Say
+          </button>
+        </form>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            handleBroadcast(broadcastDraft);
+            setBroadcastDraft("");
+          }}
+          style={{ display: "flex", gap: 4 }}
+        >
+          <input
+            value={broadcastDraft}
+            onChange={(e) => setBroadcastDraft(e.target.value)}
+            placeholder="Broadcast…"
+            style={{
+              fontSize: 11,
+              padding: "3px 8px",
+              borderRadius: 6,
+              border: "1px solid #334155",
+              background: "#0f172a",
+              color: "#cfe3ff",
+              width: 140,
+            }}
+          />
+          <button
+            type="submit"
+            style={{
+              fontSize: 11,
+              padding: "3px 8px",
+              borderRadius: 6,
+              border: "1px solid #334155",
+              background: "#1e293b",
+              color: "#cfe3ff",
+              cursor: "pointer",
+            }}
+          >
+            📢
+          </button>
+        </form>
+      </div>
 
       <div
         style={{
