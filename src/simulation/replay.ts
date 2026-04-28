@@ -32,17 +32,13 @@ export class ReplayRecorder {
         money: e.components.financial?.money ?? 0,
         goods: e.components.financial?.goods ?? 0,
       })),
-      eventKinds: world.events.slice(-5).map((e) => e.kind),
+      eventKinds: world.events.slice(-5).map((ev) => ev.kind),
       speechBubbles: world.speechBubbles.size,
     });
   }
 
   getSnapshots(): readonly ReplaySnapshot[] {
     return this.snapshots;
-  }
-
-  clear(): void {
-    this.snapshots = [];
   }
 
   /** Compare two recordings. Returns true if identical. */
@@ -55,58 +51,63 @@ export class ReplayRecorder {
     const diffs: string[] = [];
 
     if (sa.length !== sb.length) {
-      diffs.push(
-        `snapshot count mismatch: ${sa.length} vs ${sb.length}`,
-      );
-      return { match: false, diffs };
+      diffs.push(`snapshot count: ${sa.length} vs ${sb.length}`);
     }
 
-    for (let i = 0; i < sa.length; i++) {
-      const as = sa[i]!;
-      const bs = sb[i]!;
+    const len = Math.min(sa.length, sb.length);
+    for (let i = 0; i < len; i++) {
+      const snap = sa[i]!;
+      const other = sb[i]!;
 
-      if (as.tick !== bs.tick) {
-        diffs.push(`tick ${i}: tick mismatch ${as.tick} vs ${bs.tick}`);
-      }
-      if (as.eventKinds.join(",") !== bs.eventKinds.join(",")) {
-        diffs.push(
-          `tick ${as.tick}: eventKinds mismatch [${as.eventKinds.join(",")}] vs [${bs.eventKinds.join(",")}]`,
-        );
-      }
-      if (as.speechBubbles !== bs.speechBubbles) {
-        diffs.push(
-          `tick ${as.tick}: speechBubbles count ${as.speechBubbles} vs ${bs.speechBubbles}`,
-        );
+      if (snap.tick !== other.tick) {
+        diffs.push(`tick[${i}]: ${snap.tick} vs ${other.tick}`);
       }
 
-      if (as.entityStates.length !== bs.entityStates.length) {
-        diffs.push(
-          `tick ${as.tick}: entity count ${as.entityStates.length} vs ${bs.entityStates.length}`,
-        );
-        continue;
+      if (snap.entityStates.length !== other.entityStates.length) {
+        diffs.push(`entity count at tick ${snap.tick}: ${snap.entityStates.length} vs ${other.entityStates.length}`);
       }
 
-      for (let j = 0; j < as.entityStates.length; j++) {
-        const ae = as.entityStates[j]!;
-        const be = bs.entityStates[j]!;
-        if (
-          ae.x.toFixed(3) !== be.x.toFixed(3) ||
-          ae.y.toFixed(3) !== be.y.toFixed(3) ||
-          ae.energy.toFixed(6) !== be.energy.toFixed(6) ||
-          ae.activeBehavior !== be.activeBehavior ||
-          ae.phase !== be.phase ||
-          ae.money !== be.money ||
-          ae.goods !== be.goods
-        ) {
-          diffs.push(
-            `tick ${as.tick} entity ${ae.id}: ` +
-              `pos=(${ae.x.toFixed(3)},${ae.y.toFixed(3)}) vs (${be.x.toFixed(3)},${be.y.toFixed(3)}) ` +
-              `energy=${ae.energy.toFixed(6)} vs ${be.energy.toFixed(6)} ` +
-              `behavior=${ae.activeBehavior} vs ${be.activeBehavior} ` +
-              `phase=${ae.phase} vs ${be.phase} ` +
-              `money=${ae.money} vs ${be.money} ` +
-              `goods=${ae.goods} vs ${be.goods}`,
-          );
+      const eLen = Math.min(snap.entityStates.length, other.entityStates.length);
+      for (let j = 0; j < eLen; j++) {
+        const e = snap.entityStates[j]!;
+        const o = other.entityStates[j]!;
+        if (e.id !== o.id) {
+          diffs.push(`entity[${i}][${j}].id: ${e.id} vs ${o.id}`);
+        }
+        if (e.x !== o.x) {
+          diffs.push(`entity ${e.id} tick ${snap.tick} x: ${e.x} vs ${o.x}`);
+        }
+        if (e.y !== o.y) {
+          diffs.push(`entity ${e.id} tick ${snap.tick} y: ${e.y} vs ${o.y}`);
+        }
+        if (e.energy !== o.energy) {
+          diffs.push(`entity ${e.id} tick ${snap.tick} energy: ${e.energy} vs ${o.energy}`);
+        }
+        if (e.activeBehavior !== o.activeBehavior) {
+          diffs.push(`entity ${e.id} tick ${snap.tick} behavior: ${e.activeBehavior} vs ${o.activeBehavior}`);
+        }
+        if (e.phase !== o.phase) {
+          diffs.push(`entity ${e.id} tick ${snap.tick} phase: ${e.phase} vs ${o.phase}`);
+        }
+        if (e.money !== o.money) {
+          diffs.push(`entity ${e.id} tick ${snap.tick} money: ${e.money} vs ${o.money}`);
+        }
+        if (e.goods !== o.goods) {
+          diffs.push(`entity ${e.id} tick ${snap.tick} goods: ${e.goods} vs ${o.goods}`);
+        }
+      }
+
+      if (snap.speechBubbles !== other.speechBubbles) {
+        diffs.push(`speechBubbles at tick ${snap.tick}: ${snap.speechBubbles} vs ${other.speechBubbles}`);
+      }
+
+      if (snap.eventKinds.length !== other.eventKinds.length) {
+        diffs.push(`eventKinds length at tick ${snap.tick}: ${snap.eventKinds.length} vs ${other.eventKinds.length}`);
+      } else {
+        for (let k = 0; k < snap.eventKinds.length; k++) {
+          if (snap.eventKinds[k] !== other.eventKinds[k]) {
+            diffs.push(`eventKind[${k}] at tick ${snap.tick}: ${snap.eventKinds[k]} vs ${other.eventKinds[k]}`);
+          }
         }
       }
     }
