@@ -10,41 +10,6 @@ export type ArchetypeMeta = {
 };
 
 export const ARCHETYPES: Record<string, ArchetypeMeta> = {
-  Lawkeeper: {
-    "id": "ecs:Lawkeeper",
-    "name": "Lawkeeper",
-    "scale": "micro",
-    "components": [
-      "ecs:PhysicalState",
-      "ecs:CognitiveState",
-      "ecs:FinancialState",
-      "ecs:MemoryLog"
-    ],
-    "behaviors": [
-      "ecs:EnforcePolicy",
-      "ecs:Wander",
-      "ecs:Converse",
-      "ecs:Rest"
-    ]
-  },
-  MarketMaker: {
-    "id": "ecs:MarketMaker",
-    "name": "MarketMaker",
-    "scale": "micro",
-    "components": [
-      "ecs:PhysicalState",
-      "ecs:CognitiveState",
-      "ecs:FinancialState",
-      "ecs:InventoryState",
-      "ecs:MemoryLog"
-    ],
-    "behaviors": [
-      "ecs:MarkPrice",
-      "ecs:Trade",
-      "ecs:Converse",
-      "ecs:Rest"
-    ]
-  },
   Merchant: {
     "id": "ecs:Merchant",
     "name": "Merchant",
@@ -93,6 +58,49 @@ export const ARCHETYPES: Record<string, ArchetypeMeta> = {
       "ecs:Wander",
       "ecs:Converse",
       "ecs:Rest"
+    ]
+  },
+  RegulatoryBody: {
+    "id": "ecs:RegulatoryBody",
+    "name": "RegulatoryBody",
+    "scale": "meso",
+    "components": [
+      "ecs:JurisdictionalState",
+      "ecs:PolicyRegistry",
+      "ecs:EnforcementCapacity",
+      "ecs:SocialGraph",
+      "ecs:RoleState"
+    ],
+    "behaviors": [
+      "ecs:ProposeAndRatify"
+    ]
+  },
+  MarketMaker: {
+    "id": "ecs:MarketMaker",
+    "name": "MarketMaker",
+    "scale": "meso",
+    "components": [
+      "ecs:FinancialState",
+      "ecs:InventoryState",
+      "ecs:CapitalAsset"
+    ],
+    "behaviors": [
+      "ecs:Trade"
+    ]
+  },
+  ReciprocityNetwork: {
+    "id": "ecs:ReciprocityNetwork",
+    "name": "ReciprocityNetwork",
+    "scale": "meso",
+    "components": [
+      "ecs:SocialGraph",
+      "ecs:ReputationProfile",
+      "ecs:SocialDisplay",
+      "ecs:NormAdherence"
+    ],
+    "behaviors": [
+      "ecs:Converse",
+      "ecs:SociallyLearn"
     ]
   },
 };

@@ -10,7 +10,6 @@
     "typecheck": "tsc -b --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "pull-lpc": "npx tsx tools/sprite-forge/scripts/pull-lpc.ts",
     "ontology:codegen": "node --env-file-if-exists=.env.local --import tsx scripts/codegen.ts",
     "ontology:validate": "node --env-file-if-exists=.env.local --import tsx scripts/ontology-validate.ts",
     "ontology:build": "node --env-file-if-exists=.env.local --import tsx scripts/orchestrator-run.ts",

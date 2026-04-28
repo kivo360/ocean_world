@@ -16,7 +16,7 @@ type ArchetypeSpec = {
 
 const ARCHETYPES: Record<Archetype, ArchetypeSpec> = {
   Person: {
-    behaviors: ["Wander", "Converse", "Trade", "Rest", "Gossip"],
+    behaviors: ["Wander", "Converse", "Trade", "Rest"],
     baseEnergy: 0.8,
     baseMoney: 50,
     baseGoods: 2,
@@ -32,7 +32,7 @@ const ARCHETYPES: Record<Archetype, ArchetypeSpec> = {
     nameRoots: ["Ana", "Beto", "Carmen", "Diego", "Elena", "Felipe", "Gabi", "Hugo", "Ines", "Julio"],
   },
   Merchant: {
-    behaviors: ["Trade", "Converse", "Rest", "Gossip"],
+    behaviors: ["Trade", "Converse", "Rest"],
     baseEnergy: 0.9,
     baseMoney: 200,
     baseGoods: 12,
@@ -48,7 +48,7 @@ const ARCHETYPES: Record<Archetype, ArchetypeSpec> = {
     nameRoots: ["Otilia", "Paco", "Queta", "Ramon", "Sofia", "Tomas"],
   },
   Wanderer: {
-    behaviors: ["Wander", "Converse", "Rest", "Gossip"],
+    behaviors: ["Wander", "Converse", "Rest"],
     baseEnergy: 1.0,
     baseMoney: 10,
     baseGoods: 1,
@@ -64,7 +64,7 @@ const ARCHETYPES: Record<Archetype, ArchetypeSpec> = {
     nameRoots: ["Uma", "Vito", "Wren", "Xio", "Yara", "Zeno"],
   },
   MarketMaker: {
-    behaviors: ["MarkPrice", "Trade", "Converse", "Rest", "Gossip"],
+    behaviors: ["MarkPrice", "Trade", "Converse", "Rest"],
     baseEnergy: 0.95,
     baseMoney: 400,
     baseGoods: 25,
@@ -80,7 +80,7 @@ const ARCHETYPES: Record<Archetype, ArchetypeSpec> = {
     nameRoots: ["Marek", "Nadia", "Osvaldo", "Petra"],
   },
   Lawkeeper: {
-    behaviors: ["EnforcePolicy", "Wander", "Converse", "Rest", "Gossip"],
+    behaviors: ["EnforcePolicy", "Wander", "Converse", "Rest"],
     baseEnergy: 0.9,
     baseMoney: 100,
     baseGoods: 0,
@@ -179,7 +179,6 @@ export function spawnEntity(opts: {
       Rest: undefined,
       MarkPrice: undefined,
       EnforcePolicy: undefined,
-      Gossip: undefined,
     },
     activeBehavior: spec.behaviors[0]!,
     createdTick: opts.tick,
@@ -224,7 +223,6 @@ export function spawnPlayer(opts: {
       Rest: undefined,
       MarkPrice: undefined,
       EnforcePolicy: undefined,
-      Gossip: undefined,
     },
     // Placeholder — decide() short-circuits before reading this for players.
     activeBehavior: "Wander",

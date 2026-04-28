@@ -88,83 +88,17 @@ export class SpriteAtlas {
     this.cache.set(key, tex);
     return tex;
   }
-
-  /** FNV-1a 32-bit hash for deterministic variant selection. */
-  private hashToInt(id: string): number {
-    let h = 0x811c9dc5;
-    for (let i = 0; i < id.length; i++) {
-      h ^= id.charCodeAt(i);
-      h = Math.imul(h, 0x01000193);
-    }
-    return h >>> 0;
-  }
-
-  /** Returns all character IDs that match exactly or start with `${archetype}:`. */
-  variantIdsFor(archetype: string): string[] {
-    return this.manifest.characters
-      .map((c) => c.id)
-      .filter((id) => id === archetype || id.startsWith(`${archetype}:`));
-  }
-
-  /**
-   * Resolves a concrete character ID for an entity, deterministically picking
-   * from available variants using the entity ID as a hash seed.
-   * Returns null if no variants exist for the archetype.
-   */
-  resolveCharacterId(archetype: string, entityId: string): string | null {
-    const variants = this.variantIdsFor(archetype);
-    if (variants.length === 0) return null;
-    return variants[this.hashToInt(entityId) % variants.length] ?? null;
-  }
 }
 
 /**
  * Picks a walk-direction animation from a movement delta. Returns "idle" when
  * the entity hasn't moved meaningfully since the last sample. Dominant axis
  * wins, so diagonals snap to the larger component (matching most LPC games).
- *
- * With hysteresis: if `current` is provided and is a walk animation, the
- * current direction is kept unless the other axis is clearly dominant
- * (exceeds flipRatio). This prevents strobing when walking at 45°.
  */
-export function pickAnimation(
-  dx: number,
-  dy: number,
-  current?: string,
-  threshold = 0.5,
-  flipRatio = 1.5
-): string {
+export function pickAnimation(dx: number, dy: number, threshold = 0.5): string {
   const ax = Math.abs(dx);
   const ay = Math.abs(dy);
   if (ax < threshold && ay < threshold) return "idle";
-
-  // No hysteresis if no current animation or currently idle
-  if (!current || current === "idle") {
-    if (ax >= ay) return dx > 0 ? "walk-e" : "walk-w";
-    return dy > 0 ? "walk-s" : "walk-n";
-  }
-
-  // Hysteresis: stay on current direction unless other axis is clearly dominant
-  const isHorizontal = current === "walk-e" || current === "walk-w";
-  const isVertical = current === "walk-n" || current === "walk-s";
-
-  if (isHorizontal) {
-    // Stay horizontal unless vertical is clearly dominant
-    if (ay > ax * flipRatio) {
-      return dy > 0 ? "walk-s" : "walk-n";
-    }
-    return dx > 0 ? "walk-e" : "walk-w";
-  }
-
-  if (isVertical) {
-    // Stay vertical unless horizontal is clearly dominant
-    if (ax > ay * flipRatio) {
-      return dx > 0 ? "walk-e" : "walk-w";
-    }
-    return dy > 0 ? "walk-s" : "walk-n";
-  }
-
-  // Current is some other animation, fall back to dominant axis
   if (ax >= ay) return dx > 0 ? "walk-e" : "walk-w";
   return dy > 0 ? "walk-s" : "walk-n";
 }

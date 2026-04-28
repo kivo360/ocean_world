@@ -85,7 +85,6 @@ const T1_LOCKED_PHASES: Partial<Record<BehaviorName, Set<string>>> = {
   Rest: new Set(["Resting"]),
   MarkPrice: new Set(["Quoting"]),
   EnforcePolicy: new Set(["Investigating", "Levying"]),
-  Gossip: new Set(["Speaking"]),
 };
 
 function valueWeight(values: Values, behavior: BehaviorName): number {
@@ -102,8 +101,6 @@ function valueWeight(values: Values, behavior: BehaviorName): number {
       return 0.5 + 0.5 * values.profit;
     case "EnforcePolicy":
       return 0.5 + 0.5 * values.fairness;
-    case "Gossip":
-      return 0.5 + 0.5 * values.community;
   }
 }
 

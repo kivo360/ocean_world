@@ -9,4 +9,3 @@ coverage/
 .env.local
 .env.*.local
 ontology/generated/runtime/
-ontology/snapshots/*.json

@@ -1,3 +1,0 @@
-// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
-
-exports[`determinism > produces identical snapshots given the same seed 1`] = `"695bf40cb1e4878024c41f51ee587d4db861c6a1c20580ae5cdc95c1be2b7146"`;

@@ -1,9 +1,8 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
-import { spriteForgePlugin } from "./tools/sprite-forge-vite-plugin";
 
 export default defineConfig({
-  plugins: [react(), spriteForgePlugin()],
+  plugins: [react()],
   build: {
     outDir: "dist",
     sourcemap: true,

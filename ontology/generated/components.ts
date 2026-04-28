@@ -36,9 +36,304 @@ export interface PhysicalState {
   destY: number | null;
 }
 
+/** Tracks authority scope, active policies, and membership in a governance unit. (state, governance) */
+export interface JurisdictionalState {
+  jurisdiction_id: string;
+  territory_bounds: spatial_region;
+  active_policies: list[policy_id];
+  member_entities: list[entity_id];
+  authority_level: enum[local,regional,national,global];
+}
+
+/** Position, authority tier, and reporting structure within an organizational hierarchy. (state, organizational) */
+export interface RoleState {
+  title: string;
+  authority_level: integer;
+  reports_to: entity_id;
+  department: string;
+  tenure_ticks: integer;
+}
+
+/** Workflow stage, inputs consumed, outputs produced, and completion status of organizational procedures. (state, organizational) */
+export interface ProcessFlow {
+  process_id: string;
+  current_stage: string;
+  stages_remaining: string[];
+  required_inputs: resource_map;
+  produced_outputs: resource_map;
+  owner_entity: entity_id;
+  deadline_tick: integer;
+  quality_score: number;
+}
+
+/** Shared norms, values, and practices that shape collective decision-making and behavioral expectations. (state, organizational) */
+export interface OrganizationalCulture {
+  risk_tolerance: number;
+  collaboration_index: number;
+  innovation_weight: number;
+  hierarchy_flexibility: number;
+  core_values: string[];
+  ritual_practices: string[];
+}
+
+/** Aggregated trust scores and trait impressions held by others about this entity. (state, social) */
+export interface ReputationProfile {
+  global_trust_score: xsd:float;
+  impression_vector: xsd:map;
+  visibility_tier: xsd:string;
+  last_updated_tick: xsd:long;
+}
+
+/** Edges representing relationship types, strengths, and history between entities. (relation, social) */
+export interface SocialGraph {
+  outbound_edges: xsd:list;
+  inbound_edges: xsd:list;
+  relation_types_active: xsd:list;
+  cluster_affiliations: xsd:list;
+  reciprocity_balance: xsd:float;
+}
+
+/** Repository of active, pending, and historical policies with their scope, authority, and efficacy metrics. (state, governance) */
+export interface PolicyRegistry {
+  active_policies: array<policy_id>;
+  pending_proposals: array<proposal_record>;
+  policy_archive: array<historical_policy>;
+  compliance_rate: number;
+  last_review_tick: number;
+}
+
+/** Tracks coercive and incentive-based enforcement tools, sanction history, and resource availability for compliance operations. (capability, governance) */
+export interface EnforcementCapacity {
+  sanction_types: array<string>;
+  enforcement_budget: number;
+  agent_pool: array<entity_id>;
+  sanction_history: array<sanction_record>;
+  deterrence_score: number;
+}
+
+/** Tracks affiliation to collective entities with role tier, entry date, contribution score, and exit conditions. (relation, social) */
+export interface CoalitionMembership {
+  coalition_id: entity_ref;
+  role_tier: enum[founder,core,peripheral,prospect];
+  joined_tick: uint64;
+  contribution_score: float32;
+  obligation_stack: list[obligation_id];
+  exit_eligible: bool;
+}
+
+/** Records compliance and violation history against observed social norms with sanction exposure tracking. (state, social) */
+export interface NormAdherence {
+  norm_id: string;
+  internalized: bool;
+  compliance_streak: uint16;
+  violation_count: uint16;
+  last_violation_tick: uint64;
+  sanction_exposure: float32;
+  peer_pressure_received: list[entity_ref];
+  norm_salience: float32;
+}
+
+/** Renewable and depletable attention resource that gates perception depth and action complexity. (resource, cognitive) */
+export interface AttentionBudget {
+  current_focus: entity_id | null;
+  available_units: xsd:float;
+  max_capacity: xsd:float;
+  regen_rate: xsd:float;
+  focus_depth: xsd:integer;
+}
+
+/** Structured representation of entity's beliefs about world state, other entities, and causal relationships with confidence levels. (state, cognitive) */
+export interface BeliefSystem {
+  beliefs: array[belief_record];
+  belief_count: xsd:integer;
+  revision_policy: enum[conservative | neutral | radical];
+  source_trust: map[entity_id, xsd:float];
+  inconsistency_detected: xsd:boolean;
+  world_model_version: xsd:integer;
+}
+
+/** Transformative capability to convert input resources into output goods using recipes and labor. (capability, economic) */
+export interface ProductionCapacity {
+  recipes: array[Recipe];
+  throughput_rate: number;
+  active_workers: number;
+  max_workers: number;
+  downtime_until: timestamp;
+  quality_modifier: number;
+}
+
+/** Durable productive resource with depreciation, maintenance needs, and residual value. (resource, economic) */
+export interface CapitalAsset {
+  asset_type: enum[machine, building, vehicle, infrastructure, intellectual];
+  acquisition_cost: number;
+  book_value: number;
+  depreciation_rate: number;
+  maintenance_due: timestamp;
+  maintenance_cost: number;
+  productivity_multiplier: number;
+  owner_id: entity_id;
+}
+
+/** Stored knowledge, lessons learned, and institutional memory with retrieval decay and archival policies. (state, organizational) */
+export interface OrganizationalMemory {
+  knowledge_entries: array<knowledge_record>;
+  retrieval_accessibility: number;
+  last_consolidation_date: timestamp;
+  archival_policy: enum[aggressive, balanced, hoarding];
+  tacit_explicitness_ratio: number;
+}
+
+/** Delegated power to commit organizational resources, with spending limits, approval thresholds, and encumbrance tracking. (capability, organizational) */
+export interface BudgetAuthority {
+  spending_ceiling: decimal;
+  approval_thresholds: Record<string, decimal>;
+  encumbered_amount: decimal;
+  delegation_chain: array<role_id>;
+  fiscal_period_alignment: enum[annual, quarterly, project_based];
+  oversight_escalation_trigger: decimal;
+}
+
+/** Trackable public signals of status, intent, or availability that entities emit and others perceive, with impression budget and signal fatigue. (state, social) */
+export interface SocialDisplay {
+  current_signal: string;
+  signal_intensity: number;
+  impression_budget: number;
+  last_signal_tick: number;
+  perceived_by: array[entity_id];
+  signal_history: array[SignalEvent];
+}
+
+/** Multi-horizon objectives, milestone targets, resource allocation weights, and contingency triggers for organizational direction. (state, organizational) */
+export interface StrategicPlan {
+  horizon_tiers: array[HorizonRecord];
+  active_objectives: array[Objective];
+  resource_weights: map[domain, float];
+  milestone_deadlines: array[Deadline];
+  contingency_triggers: array[TriggerCondition];
+  plan_revision_count: integer;
+  last_updated: timestamp;
+}
+
+/** Workforce composition, skill inventories, development trajectories, and succession readiness for critical roles. (resource, organizational) */
+export interface TalentPool {
+  member_records: array[MemberProfile];
+  skill_matrix: map[skill_id, coverage_ratio];
+  development_plans: array[Trajectory];
+  succession_readiness: map[role_id, readiness_score];
+  retention_risk_flags: array[MemberId];
+  acquisition_pipeline: array[CandidateProfile];
+  aggregate_morale: number;
+}
+
+/** Quantified indicators of effectiveness, efficiency, and adaptation with target thresholds, variance tracking, and incentive linkages. (state, organizational) */
+export interface PerformanceMetric {
+  indicator_definitions: array[IndicatorSpec];
+  current_values: map[indicator_id, float];
+  target_thresholds: map[indicator_id, ThresholdRange];
+  variance_history: array[VarianceRecord];
+  incentive_linkages: array[LinkageRule];
+  measurement_frequencies: map[indicator_id, duration];
+  benchmark_comparators: array[PeerReference];
+  adaptation_signals: array[SignalFlag];
+}
+
+/** Delegated power to levy, collect, and allocate taxes with rate schedules, exemptions, and collection efficiency metrics. (capability, governance) */
+export interface TaxationAuthority {
+  taxJurisdiction: entity_id;
+  rateSchedule: json;
+  collectionEfficiency: number;
+  exemptionRegistry: array[entity_id];
+  revenueBalance: number;
+  allocationRules: json;
+}
+
+/** Structured forum for collective deliberation with membership roster, speaking rules, quorum requirements, and decision procedures. (relation, governance) */
+export interface DeliberativeAssembly {
+  assemblyId: string;
+  members: array[entity_id];
+  decisionProcedure: enum[consensus, majority, supermajority, weighted];
+  quorumThreshold: number;
+  speakingRules: json;
+  sessionStatus: enum[inactive, convening, deliberating, voting, adjourned];
+  chairEntity: entity_id;
+}
+
+/** Time-bound contractual claim specifying principal, interest terms, maturity date, and default status between creditor and debtor. (relation, economic) */
+export interface DebtObligation {
+  principal: number;
+  interest_rate: number;
+  maturity_tick: integer;
+  creditor_id: entity_ref;
+  debtor_id: entity_ref;
+  collateral_ids: list[entity_ref];
+  default_status: enum[performing, delinquent, defaulted];
+  payment_schedule: list[tuple[tick, amount]];
+}
+
+/** Collective risk-sharing arrangement with premium inflows, claim reserves, actuarial surplus, and coverage terms for specified peril categories. (resource, economic) */
+export interface RiskPool {
+  member_ids: list[entity_ref];
+  premium_rate: number;
+  claim_reserve: number;
+  surplus_capital: number;
+  covered_perils: list[peril_type];
+  coverage_limits: map[peril_type, float];
+  deductible: number;
+  pending_claims: list[claim_record];
+}
+
+/** Tracks genealogical relationships, affinity bonds, and familial obligation weights between entities. (relation, social) */
+export interface KinshipNetwork {
+  parent_of: ecs:EntityId[];
+  child_of: ecs:EntityId[];
+  sibling_of: ecs:EntityId[];
+  affinity_bonds: ecs:AffinityEntry[];
+  obligation_weights: xsd:float[];
+  lineage_depth: xsd:int;
+  household_id: ecs:EntityId;
+}
+
+/** Active information diffusion pathways carrying evaluative talk about third parties with distortion and decay parameters. (state, social) */
+export interface GossipChannel {
+  channel_id: ecs:UUID;
+  source_entity: ecs:EntityId;
+  target_entity: ecs:EntityId;
+  subject_entity: ecs:EntityId;
+  evaluation_polarity: xsd:float;
+  certainty_level: xsd:float;
+  distortion_factor: xsd:float;
+  decay_rate: xsd:float;
+}
+
 export type ComponentId =
   | "ecs:CognitiveState"
   | "ecs:FinancialState"
   | "ecs:InventoryState"
   | "ecs:MemoryLog"
-  | "ecs:PhysicalState";
+  | "ecs:PhysicalState"
+  | "ecs:JurisdictionalState"
+  | "ecs:RoleState"
+  | "ecs:ProcessFlow"
+  | "ecs:OrganizationalCulture"
+  | "ecs:ReputationProfile"
+  | "ecs:SocialGraph"
+  | "ecs:PolicyRegistry"
+  | "ecs:EnforcementCapacity"
+  | "ecs:CoalitionMembership"
+  | "ecs:NormAdherence"
+  | "ecs:AttentionBudget"
+  | "ecs:BeliefSystem"
+  | "ecs:ProductionCapacity"
+  | "ecs:CapitalAsset"
+  | "ecs:OrganizationalMemory"
+  | "ecs:BudgetAuthority"
+  | "ecs:SocialDisplay"
+  | "ecs:StrategicPlan"
+  | "ecs:TalentPool"
+  | "ecs:PerformanceMetric"
+  | "ecs:TaxationAuthority"
+  | "ecs:DeliberativeAssembly"
+  | "ecs:DebtObligation"
+  | "ecs:RiskPool"
+  | "ecs:KinshipNetwork"
+  | "ecs:GossipChannel";
