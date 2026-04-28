@@ -620,5 +620,7 @@ export function runTick(
   // active-region NPCs get queued (allowT3 gate in decide), so this never
   // fires LLM calls for ambient regions.
   if (t3Queue) t3Queue.beginBatch(world);
+  // Snapshot for deterministic replay if a recorder is attached.
+  if (world.replayRecorder) world.replayRecorder.record(world);
   return world.events.slice(-50);
 }

@@ -2,6 +2,7 @@ import type { WorldEvent } from "./actions";
 import type { BehaviorName, Entity, EntitySnapshot } from "./entity";
 import { createGraphMemory, type GraphMemory } from "./graph-memory";
 import { findRegion, type Region } from "./regions";
+import type { ReplayRecorder } from "./replay";
 import type { Rng } from "./rng";
 import type { ActiveScenario } from "./scenarios";
 
@@ -50,6 +51,9 @@ export type World = {
   // behavior, used by tests and any single-region scenario).
   regions: Region[];
   activeRegionId: string | null;
+  // Optional deterministic replay recorder. When attached, each tick is
+  // snapshotted for later comparison (A/B testing, regression).
+  replayRecorder?: ReplayRecorder;
 };
 
 // World events that should be folded into the long-term graph. System-level

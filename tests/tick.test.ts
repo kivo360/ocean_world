@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { REGISTRY } from "../src/behaviors/registry";
+import { ReplayRecorder } from "../src/simulation/replay";
 import { resetEntityCounter, spawnEntity } from "../src/simulation/archetypes";
 import { createRng } from "../src/simulation/rng";
 import { runTick, chooseBehavior } from "../src/simulation/tick";
@@ -34,6 +35,27 @@ describe("tick loop", () => {
     expect(sa.map((e) => ({ id: e.id, x: e.x.toFixed(3), y: e.y.toFixed(3) }))).toEqual(
       sb.map((e) => ({ id: e.id, x: e.x.toFixed(3), y: e.y.toFixed(3) })),
     );
+  });
+
+  it("replay recorder matches identical runs deterministically", () => {
+    const a = smallVillage({ seed: 42, personCount: 5, merchantCount: 1, wandererCount: 1 });
+    a.replayRecorder = new ReplayRecorder();
+    resetEntityCounter();
+    const b = smallVillage({ seed: 42, personCount: 5, merchantCount: 1, wandererCount: 1 });
+    b.replayRecorder = new ReplayRecorder();
+
+    for (let i = 0; i < 15; i++) {
+      runTick(a, REGISTRY);
+      runTick(b, REGISTRY);
+    }
+
+    const result = ReplayRecorder.compare(a.replayRecorder, b.replayRecorder);
+    if (!result.match) {
+      // Print first 5 diffs for debugging
+      console.error("Replay diffs:", result.diffs.slice(0, 5));
+    }
+    expect(result.match).toBe(true);
+    expect(result.diffs).toHaveLength(0);
   });
 
   it("speech events fire and land in listener perception", () => {
