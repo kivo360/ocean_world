@@ -1,0 +1,49 @@
+npm warn Unknown user config "store-dir". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+
+> ocean-world@0.1.0 build
+> npm run ontology:validate && tsc -b && vite build
+
+npm warn Unknown env config "store-dir". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+npm warn Unknown user config "store-dir". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+
+> ocean-world@0.1.0 ontology:validate
+> node --env-file-if-exists=.env.local --import tsx scripts/ontology-validate.ts
+
+loaded ontology: 5 components, 6 behaviors, 5 archetypes, 1 hierarchies, 0 issues
+loaded: 5 components, 6 behaviors, 5 archetypes
+[oxigraph] loaded bundle (119 triples)
+oxigraph: loaded 119 triples
+ontology invariants: OK
+
+validation OK.
+vite v6.4.2 building for production...
+transforming...
+
+new URL("surrealdb_bg.wasm", import.meta.url) doesn't exist at build time, it will remain unchanged to be resolved at runtime. If this is intended, you can use the /* @vite-ignore */ comment to suppress this warning.
+✓ 803 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                                  0.54 kB │ gzip:     0.37 kB
+dist/assets/worker-agent-oHGr1P2n.mjs           50.30 kB
+dist/assets/web_bg-BIdPzbVW.wasm             3,954.97 kB │ gzip: 1,353.36 kB
+dist/assets/surrealdb_bg-DTVEewQ4.wasm      11,974.46 kB │ gzip: 4,067.19 kB
+dist/assets/Filter-Dc_9g4Rq.js                   0.95 kB │ gzip:     0.51 kB │ map:     4.03 kB
+dist/assets/canvasUtils-DEzBViyk.js              5.73 kB │ gzip:     1.83 kB │ map:    22.11 kB
+dist/assets/BufferResource-CZtv-qU3.js          10.66 kB │ gzip:     2.83 kB │ map:    27.67 kB
+dist/assets/BitmapFont-FKlA_yXU.js              12.81 kB │ gzip:     4.67 kB │ map:    53.10 kB
+dist/assets/webworkerAll-DSBJJbG8.js            15.48 kB │ gzip:     4.94 kB │ map:    56.88 kB
+dist/assets/CanvasRenderer-CWgck801.js          17.51 kB │ gzip:     5.86 kB │ map:    76.57 kB
+dist/assets/web-CEmgNxhB.js                     21.04 kB │ gzip:     5.20 kB │ map:    79.85 kB
+dist/assets/surrealdb-wasm-pDbM2jAO.js          29.26 kB │ gzip:     9.01 kB │ map:   100.18 kB
+dist/assets/WebGPURenderer-B53_dA_v.js          38.25 kB │ gzip:    10.69 kB │ map:   128.86 kB
+dist/assets/browserAll-CB-ofmKR.js              43.10 kB │ gzip:    11.34 kB │ map:   161.97 kB
+dist/assets/RenderTargetSystem-BUOq9gJq.js      46.38 kB │ gzip:    12.76 kB │ map:   177.14 kB
+dist/assets/WebGLRenderer-CFEs43O8.js           68.49 kB │ gzip:    18.75 kB │ map:   227.67 kB
+dist/assets/surrealdb--lnOM4Z_.js               94.27 kB │ gzip:    25.15 kB │ map:   377.72 kB
+dist/assets/index-BvEA7SqF.js                  603.91 kB │ gzip:   187.80 kB │ map: 2,829.20 kB
+
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 2.37s

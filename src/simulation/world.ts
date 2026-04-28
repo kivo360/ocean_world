@@ -1,4 +1,13 @@
 import type { WorldEvent } from "./actions";
+import { BIOMES } from "./biome";
+import {
+  DECORATION_SIZES,
+  isDecorCollidable,
+  nextDecorationId,
+  type Decoration,
+  type DecorationKind,
+  type DecorationSnapshot,
+} from "./decoration";
 import type { BehaviorName, Entity, EntitySnapshot } from "./entity";
 import { createGraphMemory, type GraphMemory } from "./graph-memory";
 import { findRegion, type Region } from "./regions";
@@ -31,30 +40,17 @@ export type World = {
   order: string[];
   events: WorldEvent[];
   rng: Rng;
-  // Transient visual state — cleared each tick by renderer-friendly helpers.
   speechBubbles: Map<string, { msg: string; expiresAtTick: number }>;
-  // Cross-entity event graph. Populated automatically by emit() for any event
-  // whose `source` resolves to a known entity. Used by T3 retrieval.
   memoryGraph: GraphMemory;
-  // Cumulative count of ontology rule violations caught by the reasoner.
   policyViolations: number;
-  // Ring buffer of recent T3 LLM deliberations (stub or live). The
-  // Deliberations panel reads from here.
   deliberations: DeliberationRecord[];
-  // Currently-active scenario event (banner overlay until expiresAtTick).
   activeScenario?: ActiveScenario;
-  // Brief stage-wide color flash to make scenario events impossible to miss.
   broadcastFlash?: { color: number; expiresAtTick: number };
-  // Region-gated simulation. When `regions` is non-empty, only entities in
-  // the active region tick — others freeze. Empty array = no gating (legacy
-  // behavior, used by tests and any single-region scenario).
   regions: Region[];
   activeRegionId: string | null;
+  decorations: Decoration[];
 };
 
-// World events that should be folded into the long-term graph. System-level
-// events (t3_batch_*, needs_deliberation) are kept in the linear event log
-// only to avoid polluting per-entity recall.
 const GRAPHED_EVENT_KINDS: ReadonlySet<string> = new Set([
   "speech",
   "trade",
@@ -80,10 +76,10 @@ export function createWorld(opts: {
     deliberations: [],
     regions: opts.regions ?? [],
     activeRegionId: null,
+    decorations: [],
   };
 }
 
-/** Push a T3 deliberation record onto the ring buffer. */
 export function recordDeliberation(world: World, record: DeliberationRecord): void {
   world.deliberations.push(record);
   if (world.deliberations.length > DELIBERATION_CAP) {
@@ -106,7 +102,6 @@ export function distanceSq(ax: number, ay: number, bx: number, by: number): numb
   return dx * dx + dy * dy;
 }
 
-/** Region id at the entity's current physical position. */
 export function regionIdOf(world: World, entity: Entity): string | null {
   const p = entity.components.physical;
   if (!p) return null;
@@ -118,10 +113,6 @@ export function findNearby(world: World, entity: Entity, radius: number): Entity
   if (!p) return [];
   const r2 = radius * radius;
   const out: Entity[] = [];
-  // Region gating is *perceiver-relative*: each entity sees only neighbours in
-  // the same region they're standing in. This is symmetric for active and
-  // ambient NPCs — an ambient NPC in Old Fields sees other Old Fields NPCs;
-  // an active NPC in Town Square sees the player and other Town Square NPCs.
   const gating = world.regions.length > 0 && world.activeRegionId != null;
   const myRegion = gating ? regionIdOf(world, entity) : null;
   for (const other of world.entities.values()) {
@@ -134,9 +125,6 @@ export function findNearby(world: World, entity: Entity, radius: number): Entity
   return out;
 }
 
-/** "active" = full T1+T2+T3, "ambient" = T2-only on ambient frames, "frozen"
- *  = skip this tick. Players are always active. With no regions defined, all
- *  NPCs are active (legacy behaviour for tests). */
 export type EntityActivity = "active" | "ambient" | "frozen";
 
 export function entityActivity(
@@ -181,7 +169,6 @@ export function emit(world: World, event: Omit<WorldEvent, "tick">): void {
   world.events.push(full);
   if (world.events.length > 500) world.events.splice(0, world.events.length - 500);
 
-  // Mirror entity-relevant events into the graph memory for T3 retrieval.
   if (GRAPHED_EVENT_KINDS.has(full.kind) && world.entities.has(full.source)) {
     world.memoryGraph.insert({
       tick: full.tick,
@@ -200,4 +187,176 @@ export function setBehaviorPhase(
   data: Record<string, number | string | null> = {},
 ): void {
   entity.state[name] = { name, phase, data };
+}
+
+export function getCollisions(world: World, x: number, y: number, w: number, h: number): boolean {
+  for (const dec of world.decorations) {
+    if (!dec.isCollidable) continue;
+    if (
+      x < dec.x + dec.width &&
+      x + w > dec.x &&
+      y < dec.y + dec.height &&
+      y + h > dec.y
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function pickDecorationKind(rng: Rng, treeChance: number, rockChance: number): DecorationKind {
+  const roll = rng.next();
+  if (roll < treeChance) return "tree";
+  if (roll < treeChance + rockChance) return "rock";
+  return "signpost";
+}
+
+function makeDecoration(
+  kind: DecorationKind,
+  x: number,
+  y: number,
+  variant: number,
+  animPhase: number,
+): Decoration {
+  const size = DECORATION_SIZES[kind];
+  return {
+    id: nextDecorationId(),
+    kind,
+    x: x - size.width / 2,
+    y: y - size.height / 2,
+    width: size.width,
+    height: size.height,
+    variant,
+    isCollidable: isDecorCollidable(kind),
+    animPhase,
+  };
+}
+
+export function spawnDecorations(world: World, regions: readonly Region[]): void {
+  const placed = new Set<string>();
+
+  for (const region of regions) {
+    const biome = BIOMES[region.biome];
+    const bounds = region.bounds;
+    const area = bounds.w * bounds.h;
+    const decoCount = Math.max(8, Math.floor((area / 10_000) * biome.decorationDensity));
+    const cellArea = area / decoCount;
+    const cellSize = Math.max(16, Math.sqrt(cellArea));
+    const cols = Math.max(1, Math.floor(bounds.w / cellSize));
+    const rows = Math.max(1, Math.floor(bounds.h / cellSize));
+    const cellW = bounds.w / cols;
+    const cellH = bounds.h / rows;
+
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        const cx = bounds.x + c * cellW;
+        const cy = bounds.y + r * cellH;
+        const jitterX = world.rng.range(cellW * 0.1, cellW * 0.9);
+        const jitterY = world.rng.range(cellH * 0.1, cellH * 0.9);
+        const px = Math.round(cx + jitterX);
+        const py = Math.round(cy + jitterY);
+
+        const key = `${px},${py}`;
+        if (placed.has(key)) continue;
+        placed.add(key);
+
+        let kind: DecorationKind = "tree";
+        const ambientRoll = biome.ambientObjects.length > 0 ? world.rng.next() : 1;
+        let ambientPicked = false;
+        for (const amb of biome.ambientObjects) {
+          if (ambientRoll < amb.chance) {
+            kind = amb.kind;
+            ambientPicked = true;
+            break;
+          }
+        }
+
+        if (!ambientPicked) {
+          kind = pickDecorationKind(world.rng, biome.treeChance, biome.rockChance);
+        }
+
+        const variant = world.rng.int(0, 3);
+        const animPhase = world.rng.next();
+        world.decorations.push(makeDecoration(kind, px, py, variant, animPhase));
+      }
+    }
+
+    const gridStep = 200;
+    for (let bx = bounds.x; bx < bounds.x + bounds.w; bx += gridStep) {
+      for (let by = bounds.y; by < bounds.y + bounds.h; by += gridStep) {
+        if (world.rng.chance(biome.buildingChance)) {
+          const px = Math.round(bx + world.rng.range(24, gridStep - 24));
+          const py = Math.round(by + world.rng.range(24, gridStep - 24));
+          const variant = world.rng.int(0, 3);
+          world.decorations.push(makeDecoration("building", px, py, variant, 0));
+        }
+      }
+    }
+  }
+
+  const boundaryInterval = 120;
+  for (let i = 0; i < regions.length; i++) {
+    for (let j = i + 1; j < regions.length; j++) {
+      const a = regions[i]?.bounds;
+      const b = regions[j]?.bounds;
+      if (!a || !b) continue;
+
+      const ax2 = a.x + a.w;
+      const ay2 = a.y + a.h;
+      const bx2 = b.x + b.w;
+      const by2 = b.y + b.h;
+
+      const overlapX = Math.max(0, Math.min(ax2, bx2) - Math.max(a.x, b.x));
+      const overlapY = Math.max(0, Math.min(ay2, by2) - Math.max(a.y, b.y));
+
+      const sharesVertical =
+        overlapY > 10 &&
+        (Math.abs(ax2 - b.x) < 2 || Math.abs(bx2 - a.x) < 2);
+      const sharesHorizontal =
+        overlapX > 10 &&
+        (Math.abs(ay2 - b.y) < 2 || Math.abs(by2 - a.y) < 2);
+
+      if (!sharesVertical && !sharesHorizontal) continue;
+
+      if (sharesVertical) {
+        const edgeX = Math.abs(ax2 - b.x) < 2 ? ax2 : bx2;
+        const edgeY0 = Math.max(a.y, b.y);
+        const edgeY1 = Math.min(ay2, by2);
+        for (let py = edgeY0 + 30; py < edgeY1 - 30; py += boundaryInterval) {
+          const variant = world.rng.int(0, 3);
+          const animPhase = world.rng.next();
+          world.decorations.push(
+            makeDecoration("signpost", edgeX, Math.round(py), variant, animPhase),
+          );
+        }
+      }
+
+      if (sharesHorizontal) {
+        const edgeY = Math.abs(ay2 - b.y) < 2 ? ay2 : by2;
+        const edgeX0 = Math.max(a.x, b.x);
+        const edgeX1 = Math.min(ax2, bx2);
+        for (let px = edgeX0 + 30; px < edgeX1 - 30; px += boundaryInterval) {
+          const variant = world.rng.int(0, 3);
+          const animPhase = world.rng.next();
+          world.decorations.push(
+            makeDecoration("signpost", Math.round(px), edgeY, variant, animPhase),
+          );
+        }
+      }
+    }
+  }
+}
+
+export function getDecorationsSnapshot(world: World): DecorationSnapshot[] {
+  return world.decorations.map((d) => ({
+    id: d.id,
+    kind: d.kind,
+    variant: d.variant,
+    x: d.x,
+    y: d.y,
+    width: d.width,
+    height: d.height,
+    isCollidable: d.isCollidable,
+    animPhase: d.animPhase,
+  }));
 }

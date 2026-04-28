@@ -102,3 +102,19 @@ export function pickAnimation(dx: number, dy: number, threshold = 0.5): string {
   if (ax >= ay) return dx > 0 ? "walk-e" : "walk-w";
   return dy > 0 ? "walk-s" : "walk-n";
 }
+
+/**
+ * Compute the next animation frame, resetting to 0 when direction has just
+ * changed. This ensures smooth animation starts instead of a mid-cycle jump.
+ */
+export function getAnimationFrame(
+  oldDirection: string,
+  newDirection: string,
+  currentFrame: number,
+  directionChanged: boolean,
+): number {
+  if (directionChanged || newDirection !== oldDirection) {
+    return 0;
+  }
+  return currentFrame;
+}

@@ -20,8 +20,11 @@ import {
   type ReasonerStatus,
 } from "./ontology/oxigraph-reasoner";
 import { HoverPeek } from "./ui/HoverPeek";
+import { Minimap } from "./ui/Minimap";
 import { PixiStage } from "./renderer/PixiStage";
+import { RegionLabel } from "./ui/RegionLabel";
 import { smallVillage } from "./scenarios/small-village";
+import { TimeHud } from "./ui/TimeHud";
 import type { EntitySnapshot } from "./simulation/entity";
 import {
   createSurrealGraphMemory,
@@ -402,6 +405,20 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [renderTick]);
 
+  const worldTick = useMemo(() => worldRef.current.tick, [renderTick]);
+
+  const viewportBounds = useMemo(() => {
+    const snaps = snapshotsRef.current;
+    const player = snaps.find((s) => s.id === PLAYER_ID);
+    if (!player) return { x: 0, y: 0, width: STAGE_WIDTH, height: STAGE_HEIGHT };
+    return {
+      x: Math.max(0, Math.min(WORLD_WIDTH - STAGE_WIDTH, player.x - STAGE_WIDTH / 2)),
+      y: Math.max(0, Math.min(WORLD_HEIGHT - STAGE_HEIGHT, player.y - STAGE_HEIGHT / 2)),
+      width: STAGE_WIDTH,
+      height: STAGE_HEIGHT,
+    };
+  }, [renderTick]);
+
   const playerChatCount = useMemo(() => {
     return worldRef.current.events.reduce(
       (n, e) =>
@@ -616,6 +633,15 @@ export default function App() {
             // re-render on tick — wrapped in a key so React diffs cheap
             key={`scenario-${renderTick}`}
           />
+          <TimeHud tick={worldTick} />
+          <Minimap
+            entities={snapshotsRef.current}
+            regions={worldRef.current.regions}
+            worldWidth={WORLD_WIDTH}
+            worldHeight={WORLD_HEIGHT}
+            viewportBounds={viewportBounds}
+          />
+          <RegionLabel regionName={activeRegionName} />
           {playerOffer && (
             <div
               style={{

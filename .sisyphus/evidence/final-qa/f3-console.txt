@@ -1,0 +1,8 @@
+[debug] [vite] connecting...
+[debug] [vite] connected.
+[info] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[error] Failed to load resource: the server responded with a status of 404 (Not Found)
+[info] [surreal-graph] connecting url=mem://
+[info] [oxigraph] loaded bundle (119 triples)
+[warning] using deprecated parameters for the initialization function; pass a single object instead
+[info] [surreal-graph] connected mode=mem db=ocean.world existing=0

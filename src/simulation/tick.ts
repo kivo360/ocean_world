@@ -11,6 +11,7 @@ import {
   emit,
   entityActivity,
   findNearby,
+  getCollisions,
   getEntity,
   type EntityActivity,
   type World,
@@ -312,15 +313,35 @@ function applyMove(world: World, entityId: string, tx: number, ty: number): void
   const dy = ty - p.y;
   const dist = Math.sqrt(dx * dx + dy * dy);
   const step = p.speed * 3.5;
+  let nx: number;
+  let ny: number;
   if (dist <= step) {
-    p.x = tx;
-    p.y = ty;
+    nx = tx;
+    ny = ty;
   } else {
-    p.x += (dx / dist) * step;
-    p.y += (dy / dist) * step;
+    nx = p.x + (dx / dist) * step;
+    ny = p.y + (dy / dist) * step;
   }
-  p.x = Math.max(10, Math.min(world.bounds.width - 10, p.x));
-  p.y = Math.max(10, Math.min(world.bounds.height - 10, p.y));
+  nx = Math.max(10, Math.min(world.bounds.width - 10, nx));
+  ny = Math.max(10, Math.min(world.bounds.height - 10, ny));
+
+  const entityHalfW = 6;
+  const entityHalfH = 6;
+  if (
+    getCollisions(
+      world,
+      nx - entityHalfW,
+      ny - entityHalfH,
+      entityHalfW * 2,
+      entityHalfH * 2,
+    )
+  ) {
+    p.energy = Math.max(0, p.energy - 0.005);
+    return;
+  }
+
+  p.x = nx;
+  p.y = ny;
   p.energy = Math.max(0, p.energy - 0.01);
 }
 

@@ -2,7 +2,62 @@ import { Application, Container, Graphics, Sprite, Text, TextStyle } from "pixi.
 import { useEffect, useRef } from "react";
 import type { EntitySnapshot } from "../simulation/entity";
 import { ARCHETYPE_COLORS, ARCHETYPE_RADIUS } from "./theme";
-import { pickAnimation, SpriteAtlas } from "./sprite-atlas";
+import { getAnimationFrame, pickAnimation, SpriteAtlas } from "./sprite-atlas";
+import { footstepSound, type SurfaceType } from "../sound/FootstepSound";
+
+// ── Palette helpers ──────────────────────────────────────────────
+
+function hashId(id: string): number {
+  let hash = 5381;
+  for (let i = 0; i < id.length; i++) {
+    hash = ((hash << 5) + hash) + id.charCodeAt(i);
+    hash |= 0;
+  }
+  return hash;
+}
+
+function hslToHex(h: number, s: number, l: number): number {
+  s /= 100;
+  l /= 100;
+  const a = s * Math.min(l, 1 - l);
+  const f = (n: number) => {
+    const k = (n + h / 30) % 12;
+    const color = l - a * Math.max(Math.min(k - 3, 9 - k, 1), -1);
+    return Math.round(255 * color);
+  };
+  return (f(0) << 16) | (f(8) << 8) | f(4);
+}
+
+function shiftHue(hexColor: number, shiftDeg: number): number {
+  const r = (hexColor >> 16) & 0xff;
+  const g = (hexColor >> 8) & 0xff;
+  const b = hexColor & 0xff;
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const l = (max + min) / 2 / 255 * 100;
+  if (max !== min) {
+    const d = max - min;
+    const s = l > 50 ? d / (510 - max - min) * 100 : d / (max + min) * 100;
+    let h = 0;
+    if (max === r) h = ((g - b) / d + (g < b ? 6 : 0)) * 60;
+    else if (max === g) h = ((b - r) / d + 2) * 60;
+    else h = ((r - g) / d + 4) * 60;
+    return hslToHex(((h + shiftDeg) % 360 + 360) % 360, s, l);
+  }
+  return hexColor;
+}
+
+function groundTileColor(tileCol: number, tileRow: number): { color: number; alpha: number } {
+  const palette: Array<[number, number]> = [
+    [0x4a7c3f, 0.65], // grass
+    [0x8b7355, 0.7],  // dirt
+    [0xc4a86a, 0.6],  // path
+    [0x7a7a7a, 0.55], // stone
+  ];
+  const h = (tileCol * 7 + tileRow * 13 + 3) % 11;
+  const idx = Math.abs(h) % palette.length;
+  return { color: palette[idx][0], alpha: palette[idx][1] };
+}
 
 // Animation state lives next to each entity's gfx. Sprites animate by keeping
 // last-position so we can pick walk-{e,s,w,n} from movement delta, and a
@@ -10,17 +65,22 @@ import { pickAnimation, SpriteAtlas } from "./sprite-atlas";
 type SpriteAnimState = {
   animName: string;
   frameIdx: number;
+  prevFrameIdx: number;
   lastFrameMs: number;
   lastX: number;
   lastY: number;
+  prevDirectionProposal: string;
+  directionLockTicks: number;
 };
 
 type EntityGfx = {
   body: Graphics | Sprite;
   energyBar: Graphics;
   bubble: Text;
+  bubbleBg: Graphics;
   label: Text;
   thinking: Graphics;
+  shadow: Graphics;
   group: Container;
   /** Set when body is a Sprite (i.e. atlas had this archetype). */
   sprite?: SpriteAnimState;
@@ -78,7 +138,8 @@ const BUBBLE_STYLE = new TextStyle({
   fontFamily: "ui-sans-serif, system-ui",
   fontSize: 11,
   fill: 0xffffff,
-  stroke: { color: 0x000000, width: 3, join: "round" },
+  wordWrap: true,
+  wordWrapWidth: 110,
 });
 
 export function PixiStage({
@@ -132,11 +193,25 @@ export function PixiStage({
     let entityLayer: Container | null = null;
     let inRangeRings: Graphics | null = null;
     let selectionRing: Graphics | null = null;
+    let groundGraphics: Graphics | null = null;
+    let dayNightOverlay: Graphics | null = null;
     let rafId = 0;
 
     // (#15) Camera shake state. Managed inside the render closure.
     let shakeUntilMs = 0;
     let lastFlashExpiresAt = -1;
+
+    // (#6) Lerped display positions for smooth movement between sim ticks.
+    const displayPositions = new Map<string, { x: number; y: number }>();
+
+    const surfaceAt = (x: number, y: number): SurfaceType => {
+      const h = Math.floor(x / 200) + Math.floor(y / 200);
+      const surfaces: SurfaceType[] = [
+        "grass", "grass", "dirt", "stone",
+        "grass", "wood", "dirt", "grass",
+      ];
+      return surfaces[Math.abs(h) % surfaces.length];
+    };
 
     (async () => {
       app = new Application();
@@ -170,15 +245,28 @@ export function PixiStage({
       worldLayer = new Container();
       app.stage.addChild(worldLayer);
 
+      // Ground tiles (earthy pattern) — render behind grid.
+      groundGraphics = new Graphics();
+      const { w: wW, h: wH } = worldDimsRef.current;
+      for (let tx = 0; tx < wW; tx += 64) {
+        for (let ty = 0; ty < wH; ty += 64) {
+          const tileCol = Math.floor(tx / 64);
+          const tileRow = Math.floor(ty / 64);
+          const t = groundTileColor(tileCol, tileRow);
+          groundGraphics.rect(tx, ty, 64, 64).fill({ color: t.color, alpha: t.alpha });
+        }
+      }
+      worldLayer.addChild(groundGraphics);
+
       // Grid covers the full world so it pans naturally with the camera.
       const bg = new Graphics();
-      const { w: wW, h: wH } = worldDimsRef.current;
       for (let x = 0; x <= wW; x += 50) bg.moveTo(x, 0).lineTo(x, wH);
       for (let y = 0; y <= wH; y += 50) bg.moveTo(0, y).lineTo(wW, y);
       bg.stroke({ color: 0x1e293b, width: 1, alpha: 0.4 });
       worldLayer.addChild(bg);
 
       entityLayer = new Container();
+      entityLayer.sortableChildren = true;
       worldLayer.addChild(entityLayer);
 
       // (#46) In-range glow rings sit below the selection ring so they never
@@ -189,6 +277,10 @@ export function PixiStage({
       selectionRing = new Graphics();
       worldLayer.addChild(selectionRing);
 
+      // Day/night overlay sits on top of everything, screen-fixed.
+      dayNightOverlay = new Graphics();
+      app.stage.addChild(dayNightOverlay);
+
       app.stage.eventMode = "static";
       app.stage.hitArea = app.screen;
       app.stage.on("pointerdown", (event) => {
@@ -196,7 +288,7 @@ export function PixiStage({
       });
 
       const render = () => {
-        if (destroyed || !app || !entityLayer || !selectionRing || !worldLayer || !inRangeRings) return;
+        if (destroyed || !app || !entityLayer || !selectionRing || !worldLayer || !inRangeRings || !dayNightOverlay) return;
         const snaps = getSnapshotsRef.current();
         const selectedId = getSelectedIdRef.current();
         const thinkingIds = getThinkingIdsRef.current();
@@ -275,12 +367,26 @@ export function PixiStage({
           worldLayer.position.y += sy;
         }
 
+        const lerpFactor = 0.25;
+        for (const s of snaps) {
+          const cur = displayPositions.get(s.id);
+          if (!cur) {
+            displayPositions.set(s.id, { x: s.x, y: s.y });
+          } else {
+            cur.x += (s.x - cur.x) * lerpFactor;
+            cur.y += (s.y - cur.y) * lerpFactor;
+          }
+        }
+
         for (const s of snaps) {
           seen.add(s.id);
           let g = gfx.get(s.id);
           if (!g) {
             const id = s.id;
             const r = ARCHETYPE_RADIUS[s.archetype];
+
+            // Palette variation: shift hue based on entity ID hash.
+            const paletteShift = (hashId(s.id) % 360) - 180; // -180 to +180
 
             // Sprite path: atlas has this archetype → animated LPC sprite.
             // Fallback: coloured circle (synthetic look used before sprites).
@@ -292,18 +398,22 @@ export function PixiStage({
               // Anchor near the bottom so the entity's (x, y) corresponds to
               // the character's feet — natural for top-down placement.
               sprite.anchor.set(0.5, 0.85);
+              sprite.tint = shiftHue(ARCHETYPE_COLORS[s.archetype] ?? 0x94a3b8, paletteShift);
               body = sprite;
               spriteState = {
                 animName: "idle",
                 frameIdx: 0,
+                prevFrameIdx: 0,
                 lastFrameMs: now,
                 lastX: s.x,
                 lastY: s.y,
+                prevDirectionProposal: "idle",
+                directionLockTicks: 0,
               };
             } else {
-              const color = ARCHETYPE_COLORS[s.archetype];
+              const baseColor = ARCHETYPE_COLORS[s.archetype] ?? 0x94a3b8;
               const circle = new Graphics();
-              circle.circle(0, 0, r).fill({ color });
+              circle.circle(0, 0, r).fill({ color: shiftHue(baseColor, paletteShift) });
               circle.stroke({ color: 0x0f172a, width: 1 });
               body = circle;
             }
@@ -328,44 +438,99 @@ export function PixiStage({
             bubble.anchor.set(0.5, 1);
             bubble.visible = false;
 
+            const bubbleBg = new Graphics();
+            bubbleBg.visible = false;
+
             const thinking = new Graphics();
             thinking.visible = false;
 
+            // Shadow ellipse beneath the entity.
+            const shadow = new Graphics();
+            shadow.ellipse(0, 4, 10, 4).fill({ color: 0x000000, alpha: 0.2 });
+
             const group = new Container();
+            group.addChild(shadow);
             group.addChild(body);
             group.addChild(energyBar);
             group.addChild(label);
+            group.addChild(bubbleBg);
             group.addChild(bubble);
             group.addChild(thinking);
             entityLayer.addChild(group);
 
-            g = { body, energyBar, bubble, label, thinking, group, sprite: spriteState };
+            g = { body, energyBar, bubble, bubbleBg, label, thinking, shadow, group, sprite: spriteState };
             gfx.set(s.id, g);
           }
-          g.group.position.set(s.x, s.y);
+          const dp = displayPositions.get(s.id);
+          g.group.position.set(dp ? dp.x : s.x, dp ? dp.y : s.y);
+          g.group.zIndex = dp ? dp.y : s.y;
 
-          // Sprite animation: pick anim from movement delta, advance frame on
-          // the manifest's per-anim duration. Sprites use a different vertical
-          // offset from circles, so the energy bar / label use a sprite-aware
-          // baseline below.
+          // Sprite animation with hysteresis + footstep detection.
           if (g.sprite && atlas && g.body instanceof Sprite) {
             const ss = g.sprite;
             const dx = s.x - ss.lastX;
             const dy = s.y - ss.lastY;
-            const desired = pickAnimation(dx, dy);
-            const anim = atlas.animation(desired);
+            const raw = pickAnimation(dx, dy);
+
+            // Hysteresis: only switch direction when pickAnimation returns the
+            // same value for 3+ consecutive frames.
+            let lockedDirection = ss.animName;
+            let directionChanged = false;
+            if (raw === ss.prevDirectionProposal) {
+              if (ss.directionLockTicks < 3) ss.directionLockTicks++;
+              if (ss.directionLockTicks >= 3 && raw !== ss.animName) {
+                lockedDirection = raw;
+                directionChanged = true;
+                ss.directionLockTicks = 0;
+              }
+            } else {
+              ss.prevDirectionProposal = raw;
+              ss.directionLockTicks = 0;
+            }
+
+            const anim = atlas.animation(lockedDirection);
             if (anim) {
-              if (desired !== ss.animName) {
-                ss.animName = desired;
+              ss.prevFrameIdx = ss.frameIdx;
+
+              if (directionChanged || lockedDirection !== ss.animName) {
+                ss.animName = lockedDirection;
                 ss.frameIdx = 0;
                 ss.lastFrameMs = now;
               } else if (now - ss.lastFrameMs >= anim.frameDurationMs) {
-                const advance = Math.floor((now - ss.lastFrameMs) / anim.frameDurationMs);
+                const advance = Math.floor(
+                  (now - ss.lastFrameMs) / anim.frameDurationMs,
+                );
                 ss.frameIdx = (ss.frameIdx + advance) % anim.frames;
                 ss.lastFrameMs = now;
               }
-              const tex = atlas.frameTexture(s.archetype, ss.animName, ss.frameIdx);
+
+              const effectiveFrame = getAnimationFrame(
+                ss.animName,
+                lockedDirection,
+                ss.frameIdx,
+                directionChanged,
+              );
+              const tex = atlas.frameTexture(s.archetype, ss.animName, effectiveFrame);
               if (tex) g.body.texture = tex;
+
+              // Footstep sound: play on foot-down frames of walk animation.
+              if (
+                ss.prevFrameIdx !== ss.frameIdx &&
+                ss.animName.startsWith("walk-")
+              ) {
+                const footDownFrames = new Set([
+                  0,
+                  Math.floor(anim.frames / 2),
+                ]);
+                if (footDownFrames.has(ss.frameIdx)) {
+                  const camX = -worldLayer.position.x + width / 2;
+                  const camY = -worldLayer.position.y + height / 2;
+                  const dist = Math.hypot(s.x - camX, s.y - camY);
+                  const vol =
+                    Math.max(0, Math.min(1, 1 - dist / 600)) * 0.35;
+                  footstepSound.play(surfaceAt(s.x, s.y), vol);
+                }
+              }
             }
             ss.lastX = s.x;
             ss.lastY = s.y;
@@ -396,8 +561,35 @@ export function PixiStage({
             if (g.bubble.text !== s.speechBubble) g.bubble.text = s.speechBubble;
             g.bubble.position.set(0, headTopY);
             g.bubble.visible = true;
+            // Draw bubble background + tail
+            g.bubbleBg.clear();
+            const tw = g.bubble.width;
+            const th = g.bubble.height;
+            const padX = 6;
+            const padY = 4;
+            const radius = 6;
+            const bx = -tw / 2 - padX;
+            const by = headTopY - th - padY;
+            const bw = tw + padX * 2;
+            const bh = th + padY * 2;
+            // Archetype-based fill color, darkened to 25 %
+            const rawColor = ARCHETYPE_COLORS[s.archetype] ?? 0x94a3b8;
+            const rr = ((rawColor >> 16) & 0xff) * 0.25;
+            const gg = ((rawColor >> 8) & 0xff) * 0.25;
+            const bb = (rawColor & 0xff) * 0.25;
+            const darkColor = (Math.floor(rr) << 16) | (Math.floor(gg) << 8) | Math.floor(bb);
+            g.bubbleBg.roundRect(bx, by, bw, bh, radius).fill({ color: darkColor, alpha: 0.9 });
+            g.bubbleBg.stroke({ color: 0xffffff, width: 0.5, alpha: 0.3 });
+            // Triangle tail pointing down
+            g.bubbleBg.moveTo(-5, by + bh);
+            g.bubbleBg.lineTo(5, by + bh);
+            g.bubbleBg.lineTo(0, by + bh + 7);
+            g.bubbleBg.closePath();
+            g.bubbleBg.fill({ color: darkColor, alpha: 0.9 });
+            g.bubbleBg.visible = true;
           } else {
             g.bubble.visible = false;
+            if (g.bubbleBg) g.bubbleBg.visible = false;
           }
 
           // T3 "thinking" indicator: a pulsing purple dot above the entity.
@@ -415,15 +607,30 @@ export function PixiStage({
           }
         }
 
+        // Day/night cycle overlay — full-screen tint that cycles every 2 min.
+        const DAY_CYCLE_MS = 120_000;
+        const dayPhase = (performance.now() % DAY_CYCLE_MS) / DAY_CYCLE_MS;
+        // 0.0=midnight, 0.25=dawn, 0.5=noon, 0.75=dusk
+        let nightAlpha = 0;
+        let nightColor = 0x0b1220;
+        if (dayPhase < 0.1 || dayPhase > 0.9) { nightAlpha = 0.5; nightColor = 0x0b1220; }
+        else if (dayPhase < 0.2) { const t = (dayPhase - 0.1) / 0.1; nightAlpha = 0.5 * (1 - t); }
+        else if (dayPhase > 0.8) { const t = (dayPhase - 0.8) / 0.1; nightAlpha = 0.5 * t; }
+        let overlayColor = nightColor;
+        if (dayPhase > 0.15 && dayPhase < 0.25) { overlayColor = 0xcc7700; nightAlpha = Math.max(nightAlpha, 0.15); }
+        else if (dayPhase > 0.75 && dayPhase < 0.85) { overlayColor = 0x8822aa; nightAlpha = Math.max(nightAlpha, 0.2); }
+        dayNightOverlay.clear();
+        dayNightOverlay.rect(0, 0, width, height).fill({ color: overlayColor, alpha: nightAlpha * 0.6 });
+
         for (const [id, g] of gfx) {
           if (!seen.has(id)) {
             g.group.destroy({ children: true });
             gfx.delete(id);
+            displayPositions.delete(id);
           }
         }
 
-        // (#46) In-range indicator: subtle cyan glow ring around non-player
-        // entities within interactRadius of the player. Redrawn each frame.
+        // (#46) In-range indicator. Uses display positions for visual tracking.
         inRangeRings.clear();
         const playerSnap = snaps.find((s) => s.archetype === "Player");
         if (playerSnap) {
@@ -431,14 +638,19 @@ export function PixiStage({
           const ir2 = ir * ir;
           for (const s of snaps) {
             if (s.archetype === "Player") continue;
+            // Use snapshot positions for the actual distance check.
             const dx = s.x - playerSnap.x;
             const dy = s.y - playerSnap.y;
             if (dx * dx + dy * dy <= ir2) {
               const eGfx = gfx.get(s.id);
               const eIsSprite = eGfx?.body instanceof Sprite;
               const ringR = (eIsSprite ? 14 : ARCHETYPE_RADIUS[s.archetype] + 4) + 4;
+              // Render ring at display position so it tracks lerped entity.
+              const edp = displayPositions.get(s.id);
+              const rx = edp ? edp.x : s.x;
+              const ry = edp ? edp.y : s.y;
               inRangeRings
-                .circle(s.x, s.y, ringR)
+                .circle(rx, ry, ringR)
                 .stroke({ color: 0x22d3ee, width: 1.5, alpha: 0.35 });
             }
           }
@@ -451,8 +663,11 @@ export function PixiStage({
             const selGfx = gfx.get(sel.id);
             const isSprite = selGfx?.body instanceof Sprite;
             const radius = isSprite ? 14 : ARCHETYPE_RADIUS[sel.archetype] + 4;
+            const sdp = displayPositions.get(sel.id);
+            const sx = sdp ? sdp.x : sel.x;
+            const sy = sdp ? sdp.y : sel.y;
             selectionRing
-              .circle(sel.x, sel.y, radius)
+              .circle(sx, sy, radius)
               .stroke({ color: 0xffffff, width: 2, alpha: 0.9 });
           }
         }

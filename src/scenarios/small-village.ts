@@ -1,8 +1,10 @@
 import { spawnEntity, resetEntityCounter } from "../simulation/archetypes";
+import type { BiomeName } from "../simulation/biome";
+import { resetDecorationCounter } from "../simulation/decoration";
 import type { GraphMemory } from "../simulation/graph-memory";
 import type { Region } from "../simulation/regions";
 import { createRng } from "../simulation/rng";
-import { addEntity, createWorld, type World } from "../simulation/world";
+import { addEntity, createWorld, spawnDecorations, type World } from "../simulation/world";
 
 export type ScenarioOptions = {
   seed?: number;
@@ -16,31 +18,55 @@ export type ScenarioOptions = {
   memoryGraph?: GraphMemory;
 };
 
-// Tile the world into a 2x2 grid of regions. Only the player's current region
-// ticks each step, so NPC simulation cost is bounded by region population
-// instead of total world population. See ROADMAP.md → Shape A.
 function buildRegions(width: number, height: number): Region[] {
-  const halfW = width / 2;
-  const halfH = height / 2;
+  const topH = Math.round(height * 0.375);
+  const colW = Math.round(width / 3);
+  const bottomW = Math.round(width / 2);
+
+  const biome = (name: BiomeName): BiomeName => name;
+
   return [
-    { id: "town-square", name: "Town Square", bounds: { x: 0, y: 0, w: halfW, h: halfH } },
-    { id: "market-row", name: "Market Row", bounds: { x: halfW, y: 0, w: halfW, h: halfH } },
-    { id: "old-fields", name: "Old Fields", bounds: { x: 0, y: halfH, w: halfW, h: halfH } },
+    {
+      id: "town-square",
+      name: "Town Square",
+      bounds: { x: 0, y: 0, w: colW, h: topH },
+      biome: biome("town-square"),
+    },
+    {
+      id: "market-row",
+      name: "Market Row",
+      bounds: { x: colW, y: 0, w: colW, h: topH },
+      biome: biome("market-row"),
+    },
+    {
+      id: "garrison",
+      name: "Garrison",
+      bounds: { x: colW * 2, y: 0, w: width - colW * 2, h: topH },
+      biome: biome("garrison"),
+    },
     {
       id: "driftwood-coast",
       name: "Driftwood Coast",
-      bounds: { x: halfW, y: halfH, w: halfW, h: halfH },
+      bounds: { x: 0, y: topH, w: bottomW, h: height - topH },
+      biome: biome("driftwood"),
+    },
+    {
+      id: "wilds",
+      name: "Wilds",
+      bounds: { x: bottomW, y: topH, w: width - bottomW, h: height - topH },
+      biome: biome("wilds"),
     },
   ];
 }
 
 export function smallVillage(opts: ScenarioOptions = {}): World {
   const seed = opts.seed ?? 1337;
-  const bounds = { width: opts.width ?? 1100, height: opts.height ?? 700 };
+  const bounds = { width: opts.width ?? 2400, height: opts.height ?? 1600 };
   const rng = createRng(seed);
   const regions = buildRegions(bounds.width, bounds.height);
   const world = createWorld({ bounds, rng, memoryGraph: opts.memoryGraph, regions });
   resetEntityCounter();
+  resetDecorationCounter();
 
   const persons = opts.personCount ?? 60;
   const merchants = opts.merchantCount ?? 6;
@@ -63,5 +89,6 @@ export function smallVillage(opts: ScenarioOptions = {}): World {
   for (let i = 0; i < lawkeepers; i++) {
     addEntity(world, spawnEntity({ archetype: "Lawkeeper", rng, bounds, tick: 0 }));
   }
+  spawnDecorations(world, regions);
   return world;
 }

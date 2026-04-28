@@ -1,0 +1,29 @@
+npm warn Unknown user config "store-dir". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+
+> ocean-world@0.1.0 test
+> vitest run
+
+
+ RUN  v2.1.9 /Users/kevinhill/Coding/Experiments/ocean_ontology/ocean-world
+
+ ✓ tests/fireworks.test.ts (6 tests) 7ms
+ ✓ tests/ontology.test.ts (11 tests) 54ms
+ ✓ tests/t3.test.ts (8 tests) 8ms
+ ✓ tests/tick.test.ts (6 tests) 16ms
+ ✓ tests/sandbox-agent.test.ts (4 tests) 37ms
+ ✓ tests/orchestrator.test.ts (17 tests) 69ms
+ ✓ tests/sprite-atlas.test.ts (32 tests) 10ms
+ ✓ tests/graph-memory.test.ts (6 tests) 3ms
+ ✓ tests/storage.test.ts (7 tests) 4ms
+ ✓ tests/behaviors.test.ts (4 tests) 4ms
+ ✓ tests/ecs.test.ts (3 tests) 6ms
+ ✓ tests/agent-bridge.test.ts (8 tests) 5ms
+ ✓ tests/observer.test.ts (5 tests) 113ms
+ ✓ tests/rng.test.ts (2 tests) 4ms
+ ✓ tests/oxigraph-reasoner.test.ts (6 tests) 242ms
+
+ Test Files  15 passed (15)
+      Tests  125 passed (125)
+   Start at  10:17:50
+   Duration  1.11s (transform 612ms, setup 0ms, collect 2.03s, tests 583ms, environment 2ms, prepare 747ms)
+

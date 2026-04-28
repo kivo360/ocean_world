@@ -3,6 +3,8 @@
 // elsewhere, NPCs are frozen until the player enters their region. This is
 // Shape A of the map architecture: one World, region-gated simulation.
 
+import type { BiomeName } from "./biome";
+
 export type RegionBounds = {
   x: number;
   y: number;
@@ -14,6 +16,7 @@ export type Region = {
   id: string;
   name: string;
   bounds: RegionBounds;
+  biome: BiomeName;
 };
 
 export function findRegion(regions: readonly Region[], x: number, y: number): Region | null {

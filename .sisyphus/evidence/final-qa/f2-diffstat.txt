@@ -1,0 +1,4 @@
+ src/App.tsx                | 26 ----------------
+ src/renderer/PixiStage.tsx | 76 +---------------------------------------------
+ src/ui/HoverPeek.tsx       | 32 -------------------
+ 3 files changed, 1 insertion(+), 133 deletions(-)
