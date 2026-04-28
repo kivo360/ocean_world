@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { pickAnimation, SpriteAtlas, AnimationSpec, AtlasManifest } from "../src/renderer/sprite-atlas";
-import { Texture, Rectangle } from "pixi.js";
+import { pickAnimation, SpriteAtlas, AtlasManifest } from "../src/renderer/sprite-atlas";
+import { Texture } from "pixi.js";
 
 // Helper to create a mock AtlasManifest for deterministic testing
 function createMockManifest(): AtlasManifest {
