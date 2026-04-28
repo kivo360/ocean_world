@@ -4,6 +4,15 @@ import type { EntitySnapshot } from "../simulation/entity";
 import { ARCHETYPE_COLORS, ARCHETYPE_RADIUS } from "./theme";
 import { pickAnimation, SpriteAtlas } from "./sprite-atlas";
 
+function entityIdHash(id: string): number {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) {
+    h = ((h << 5) - h) + id.charCodeAt(i);
+    h |= 0;
+  }
+  return h;
+}
+
 // Animation state lives next to each entity's gfx. Sprites animate by keeping
 // last-position so we can pick walk-{e,s,w,n} from movement delta, and a
 // frame counter that advances on the manifest's per-anim duration.
@@ -292,6 +301,13 @@ export function PixiStage({
           }
           g.group.position.set(s.x, s.y);
 
+          const bobOffset = Math.sin(now / 800 + entityIdHash(s.id) * 0.5) * 1.5;
+          g.group.y += bobOffset;
+
+          const { w: bW, h: bH } = worldDimsRef.current;
+          if (s.x <= 10 || s.x >= bW - 10 || s.y <= 10 || s.y >= bH - 10) {
+            g.group.x += Math.sin(now / 100) * 2;
+          }
           // Sprite animation: pick anim from movement delta, advance frame on
           // the manifest's per-anim duration. Sprites use a different vertical
           // offset from circles, so the energy bar / label use a sprite-aware
@@ -329,7 +345,23 @@ export function PixiStage({
           g.energyBar.clear();
           const barW = 14;
           g.energyBar.rect(-barW / 2, overlayBaseY, barW, 2).fill({ color: 0x334155 });
-          g.energyBar.rect(-barW / 2, overlayBaseY, barW * s.energy, 2).fill({ color: 0x34d399 });
+          let energyColor: number;
+          if (s.energy < 0.3) {
+            const t = s.energy / 0.3;
+            const er = Math.round(0xe7 + (0xf3 - 0xe7) * t);
+            const eg = Math.round(0x4c + (0x9c - 0x4c) * t);
+            const eb = Math.round(0x3c + (0x12 - 0x3c) * t);
+            energyColor = (er << 16) | (eg << 8) | eb;
+          } else if (s.energy < 0.7) {
+            const t = (s.energy - 0.3) / 0.4;
+            const er = Math.round(0xf3 + (0x34 - 0xf3) * t);
+            const eg = Math.round(0x9c + (0xd3 - 0x9c) * t);
+            const eb = Math.round(0x12 + (0x99 - 0x12) * t);
+            energyColor = (er << 16) | (eg << 8) | eb;
+          } else {
+            energyColor = 0x34d399;
+          }
+          g.energyBar.rect(-barW / 2, overlayBaseY, barW * s.energy, 2).fill({ color: energyColor });
 
           g.label.position.set(0, labelY);
           if (g.label.text !== s.name) g.label.text = s.name;
@@ -376,10 +408,12 @@ export function PixiStage({
           if (sel) {
             const selGfx = gfx.get(sel.id);
             const isSprite = selGfx?.body instanceof Sprite;
-            const radius = isSprite ? 14 : ARCHETYPE_RADIUS[sel.archetype] + 4;
+            const baseRadius = isSprite ? 14 : ARCHETYPE_RADIUS[sel.archetype] + 4;
+            const ringPulse = 0.4 + 0.6 * Math.abs(Math.sin(now / 250));
+            const radius = baseRadius + Math.sin(now / 400) * 1.5;
             selectionRing
               .circle(sel.x, sel.y, radius)
-              .stroke({ color: 0xffffff, width: 2, alpha: 0.9 });
+              .stroke({ color: 0xffffff, width: 2, alpha: ringPulse });
           }
         }
 
