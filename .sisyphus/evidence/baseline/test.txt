@@ -1,0 +1,28 @@
+npm warn Unknown user config "store-dir". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+
+> ocean-world@0.1.0 test
+> vitest run
+
+
+[1m[7m[36m RUN [39m[27m[22m [36mv2.1.9 [39m[90m/Users/kevinhill/Coding/Experiments/ocean_ontology/ocean-world[39m
+
+ [32m✓[39m tests/fireworks.test.ts [2m([22m[2m6 tests[22m[2m)[22m[90m 7[2mms[22m[39m
+ [32m✓[39m tests/t3.test.ts [2m([22m[2m8 tests[22m[2m)[22m[90m 4[2mms[22m[39m
+ [32m✓[39m tests/tick.test.ts [2m([22m[2m5 tests[22m[2m)[22m[90m 11[2mms[22m[39m
+ [32m✓[39m tests/ontology.test.ts [2m([22m[2m11 tests[22m[2m)[22m[90m 150[2mms[22m[39m
+ [32m✓[39m tests/sandbox-agent.test.ts [2m([22m[2m4 tests[22m[2m)[22m[90m 82[2mms[22m[39m
+ [32m✓[39m tests/observer.test.ts [2m([22m[2m5 tests[22m[2m)[22m[90m 75[2mms[22m[39m
+ [32m✓[39m tests/orchestrator.test.ts [2m([22m[2m17 tests[22m[2m)[22m[90m 176[2mms[22m[39m
+ [32m✓[39m tests/graph-memory.test.ts [2m([22m[2m6 tests[22m[2m)[22m[90m 9[2mms[22m[39m
+ [32m✓[39m tests/behaviors.test.ts [2m([22m[2m4 tests[22m[2m)[22m[90m 2[2mms[22m[39m
+ [32m✓[39m tests/oxigraph-reasoner.test.ts [2m([22m[2m6 tests[22m[2m)[22m[90m 167[2mms[22m[39m
+ [32m✓[39m tests/agent-bridge.test.ts [2m([22m[2m8 tests[22m[2m)[22m[90m 22[2mms[22m[39m
+ [32m✓[39m tests/rng.test.ts [2m([22m[2m2 tests[22m[2m)[22m[90m 5[2mms[22m[39m
+ [32m✓[39m tests/storage.test.ts [2m([22m[2m7 tests[22m[2m)[22m[90m 11[2mms[22m[39m
+ [32m✓[39m tests/ecs.test.ts [2m([22m[2m3 tests[22m[2m)[22m[90m 27[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m14 passed[39m[22m[90m (14)[39m
+[2m      Tests [22m [1m[32m92 passed[39m[22m[90m (92)[39m
+[2m   Start at [22m 00:48:24
+[2m   Duration [22m 1.50s[2m (transform 742ms, setup 0ms, collect 2.45s, tests 749ms, environment 2ms, prepare 1.21s)[22m
+
