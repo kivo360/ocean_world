@@ -87,6 +87,8 @@ type PixiStageProps = {
 // camera position; lower = smoother, higher = snappier (1.0 = instant).
 const CAMERA_LERP = 0.18;
 const CAMERA_DEAD_ZONE_FRAC = 0.3; // 30% of viewport in each axis
+const CAMERA_LOOKAHEAD_FACTOR = 0.3;
+const CAMERA_LOOKAHEAD_MAX = 40;
 
 const LABEL_STYLE = new TextStyle({
   fontFamily: "ui-sans-serif, system-ui",
@@ -201,6 +203,10 @@ export function PixiStage({
         if (event.target === app!.stage) onSelectRef.current(null);
       });
 
+      // Persistent camera state for lookahead across frames.
+      let prevTargetX = 0;
+      let prevTargetY = 0;
+
       const render = () => {
         if (destroyed || !app || !entityLayer || !selectionRing || !worldLayer) return;
         const snaps = getSnapshotsRef.current();
@@ -257,13 +263,166 @@ export function PixiStage({
             } else {
               desY = (height - cb.h) / 2 - cb.y;
             }
-            // Ease toward the clamped target.
+            // Camera lookahead: nudge camera ahead of player movement.
+            const lookaheadDx = (target.x - prevTargetX) * CAMERA_LOOKAHEAD_FACTOR;
+            const lookaheadDy = (target.y - prevTargetY) * CAMERA_LOOKAHEAD_FACTOR;
+            prevTargetX = target.x;
+            prevTargetY = target.y;
+            desX += Math.max(-CAMERA_LOOKAHEAD_MAX, Math.min(CAMERA_LOOKAHEAD_MAX, lookaheadDx));
+            desY += Math.max(-CAMERA_LOOKAHEAD_MAX, Math.min(CAMERA_LOOKAHEAD_MAX, lookaheadDy));
+            // Ease toward the final target.
             worldLayer.position.set(
               cx + (desX - cx) * CAMERA_LERP,
               cy + (desY - cy) * CAMERA_LERP,
             );
           }
         }
+
+        // ── Render entity ─ extracted from the RAF loop ──────────────────
+        const renderEntity = (s: EntitySnapshot, g: EntityGfx): void => {
+          g.visualX += (s.x - g.visualX) * ENTITY_EASING;
+          g.visualY += (s.y - g.visualY) * ENTITY_EASING;
+          g.group.position.set(g.visualX, g.visualY);
+
+          const bobOffset = Math.sin(now / 800 + entityIdHash(s.id) * 0.5) * 1.5;
+          g.group.y += bobOffset;
+
+          const { w: bW, h: bH } = worldDimsRef.current;
+          if (s.x <= 10 || s.x >= bW - 10 || s.y <= 10 || s.y >= bH - 10) {
+            g.group.x += Math.sin(now / 100) * 2;
+          }
+
+          if (g.sprite && atlas && g.body instanceof Sprite) {
+            const ss = g.sprite;
+            const dx = s.x - ss.lastX;
+            const dy = s.y - ss.lastY;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            const isMoving = dist > WALK_PIXEL_THRESHOLD;
+            const desired = pickAnimation(dx, dy);
+
+            if (isMoving) {
+              ss.lastMovedMs = now;
+            }
+
+            if (desired !== ss.animName) {
+              if (desired === "idle") {
+                ss.transitionFrames = 2;
+              } else {
+                ss.frameIdx = 0;
+              }
+              ss.animName = desired;
+              ss.lastFrameMs = now;
+            }
+
+            const anim = atlas.animation(ss.animName);
+            if (anim) {
+              if (now - ss.lastFrameMs >= anim.frameDurationMs) {
+                if (ss.transitionFrames > 0) {
+                  ss.frameIdx = Math.max(ss.frameIdx - 1, 0);
+                  ss.transitionFrames--;
+                } else {
+                  const advance = Math.floor(
+                    (now - ss.lastFrameMs) / anim.frameDurationMs,
+                  );
+                  ss.frameIdx = (ss.frameIdx + advance) % anim.frames;
+                }
+                ss.lastFrameMs = now;
+              }
+              const tex = atlas.frameTexture(
+                s.archetype,
+                ss.animName,
+                ss.frameIdx,
+              );
+              if (tex) g.body.texture = tex;
+            }
+
+            if (!isMoving && now - ss.lastMovedMs > IDLE_FIDGET_MS) {
+              const wobble = Math.sin(now / 2000 + entityIdHash(s.id) * 3.7);
+              if (wobble > 0.95) {
+                g.group.y -= 1.5;
+              }
+            }
+
+            if (isMoving && now - ss.lastFootstepMs >= FOOTSTEP_INTERVAL_MS) {
+              ss.lastFootstepMs = now;
+              if (dustLayer) {
+                const count = 1 + (entityIdHash(s.id) % 3);
+                for (let i = 0; i < count; i++) {
+                  const p = new Graphics();
+                  p.circle(0, 0, 0.5 + Math.random() * 0.5).fill({
+                    color: 0x94a3b8,
+                    alpha: 0.6,
+                  });
+                  p.position.set(
+                    g.group.x + (Math.random() - 0.5) * 6,
+                    g.group.y + 3 + (Math.random() - 0.5) * 2,
+                  );
+                  dustLayer.addChild(p);
+                  dustParticles.push({
+                    gfx: p,
+                    spawnMs: now,
+                    vx: (Math.random() - 0.5) * 0.3,
+                    vy: Math.random() * 0.2 + 0.1,
+                  });
+                }
+              }
+            }
+
+            ss.lastX = s.x;
+            ss.lastY = s.y;
+          }
+
+          const isSprite = g.body instanceof Sprite;
+          const overlayBaseY = isSprite ? 6 : ARCHETYPE_RADIUS[s.archetype] + 3;
+          const labelY = isSprite ? 10 : ARCHETYPE_RADIUS[s.archetype] + 7;
+
+          g.energyBar.clear();
+          const barW = 14;
+          g.energyBar.rect(-barW / 2, overlayBaseY, barW, 2).fill({ color: 0x334155 });
+          let energyColor: number;
+          if (s.energy < 0.3) {
+            const t = s.energy / 0.3;
+            const er = Math.round(0xe7 + (0xf3 - 0xe7) * t);
+            const eg = Math.round(0x4c + (0x9c - 0x4c) * t);
+            const eb = Math.round(0x3c + (0x12 - 0x3c) * t);
+            energyColor = (er << 16) | (eg << 8) | eb;
+          } else if (s.energy < 0.7) {
+            const t = (s.energy - 0.3) / 0.4;
+            const er = Math.round(0xf3 + (0x34 - 0xf3) * t);
+            const eg = Math.round(0x9c + (0xd3 - 0x9c) * t);
+            const eb = Math.round(0x12 + (0x99 - 0x12) * t);
+            energyColor = (er << 16) | (eg << 8) | eb;
+          } else {
+            energyColor = 0x34d399;
+          }
+          g.energyBar.rect(-barW / 2, overlayBaseY, barW * s.energy, 2).fill({ color: energyColor });
+
+          g.label.position.set(0, labelY);
+          if (g.label.text !== s.name) g.label.text = s.name;
+
+          const headTopY = isSprite ? -28 : -ARCHETYPE_RADIUS[s.archetype] - 6;
+
+          if (s.speechBubble) {
+            if (g.bubble.text !== s.speechBubble) g.bubble.text = s.speechBubble;
+            g.bubble.position.set(0, headTopY);
+            g.bubble.visible = true;
+          } else {
+            g.bubble.visible = false;
+          }
+
+          if (thinkingIds.has(s.id)) {
+            g.thinking.visible = true;
+            g.thinking.clear();
+            const pulse = 0.6 + 0.4 * Math.abs(Math.sin(now / 250));
+            const ty = headTopY - 8;
+            g.thinking.circle(0, ty, 2.5).fill({ color: 0xa855f7, alpha: pulse });
+            g.thinking.circle(5, ty, 2).fill({ color: 0xa855f7, alpha: pulse * 0.7 });
+            g.thinking.circle(-5, ty, 2).fill({ color: 0xa855f7, alpha: pulse * 0.7 });
+          } else if (g.thinking.visible) {
+            g.thinking.visible = false;
+            g.thinking.clear();
+          }
+        };
 
         for (const s of snaps) {
           seen.add(s.id);
@@ -331,165 +490,7 @@ export function PixiStage({
             g = { body, energyBar, bubble, label, thinking, group, sprite: spriteState, visualX: s.x, visualY: s.y };
             gfx.set(s.id, g);
           }
-          // Visual-only acceleration easing toward simulation position.
-          g.visualX += (s.x - g.visualX) * ENTITY_EASING;
-          g.visualY += (s.y - g.visualY) * ENTITY_EASING;
-          g.group.position.set(g.visualX, g.visualY);
-
-          const bobOffset = Math.sin(now / 800 + entityIdHash(s.id) * 0.5) * 1.5;
-          g.group.y += bobOffset;
-
-          const { w: bW, h: bH } = worldDimsRef.current;
-          if (s.x <= 10 || s.x >= bW - 10 || s.y <= 10 || s.y >= bH - 10) {
-            g.group.x += Math.sin(now / 100) * 2;
-          }
-          // Sprite animation: pick anim from movement delta, advance frame on
-          // the manifest's per-anim duration. Sprites use a different vertical
-          // offset from circles, so the energy bar / label use a sprite-aware
-          // baseline below.
-          if (g.sprite && atlas && g.body instanceof Sprite) {
-            const ss = g.sprite;
-            const dx = s.x - ss.lastX;
-            const dy = s.y - ss.lastY;
-            const dist = Math.sqrt(dx * dx + dy * dy);
-            const isMoving = dist > WALK_PIXEL_THRESHOLD;
-            const desired = pickAnimation(dx, dy);
-
-            // Track last movement timestamp for idle-fidget detection.
-            if (isMoving) {
-              ss.lastMovedMs = now;
-            }
-
-            if (desired !== ss.animName) {
-              if (desired === "idle") {
-                // Stop-animation interpolation: instead of snapping frameIdx
-                // to 0, coast it down smoothly over 2 transition frames.
-                ss.transitionFrames = 2;
-              } else {
-                ss.frameIdx = 0;
-              }
-              ss.animName = desired;
-              ss.lastFrameMs = now;
-            }
-
-            const anim = atlas.animation(ss.animName);
-            if (anim) {
-              if (now - ss.lastFrameMs >= anim.frameDurationMs) {
-                if (ss.transitionFrames > 0) {
-                  ss.frameIdx = Math.max(ss.frameIdx - 1, 0);
-                  ss.transitionFrames--;
-                } else {
-                  const advance = Math.floor(
-                    (now - ss.lastFrameMs) / anim.frameDurationMs,
-                  );
-                  ss.frameIdx = (ss.frameIdx + advance) % anim.frames;
-                }
-                ss.lastFrameMs = now;
-              }
-              const tex = atlas.frameTexture(
-                s.archetype,
-                ss.animName,
-                ss.frameIdx,
-              );
-              if (tex) g.body.texture = tex;
-            }
-
-            // Idle fidget: occasional subtle bounce after 5+ seconds still.
-            if (!isMoving && now - ss.lastMovedMs > IDLE_FIDGET_MS) {
-              const wobble = Math.sin(now / 2000 + entityIdHash(s.id) * 3.7);
-              if (wobble > 0.95) {
-                g.group.y -= 1.5;
-              }
-            }
-
-            // Footstep dust: spawn 1-3 small particles on walking cadence.
-            if (isMoving && now - ss.lastFootstepMs >= FOOTSTEP_INTERVAL_MS) {
-              ss.lastFootstepMs = now;
-              if (dustLayer) {
-                const count = 1 + (entityIdHash(s.id) % 3);
-                for (let i = 0; i < count; i++) {
-                  const p = new Graphics();
-                  p.circle(0, 0, 0.5 + Math.random() * 0.5).fill({
-                    color: 0x94a3b8,
-                    alpha: 0.6,
-                  });
-                  p.position.set(
-                    g.group.x + (Math.random() - 0.5) * 6,
-                    g.group.y + 3 + (Math.random() - 0.5) * 2,
-                  );
-                  dustLayer.addChild(p);
-                  dustParticles.push({
-                    gfx: p,
-                    spawnMs: now,
-                    vx: (Math.random() - 0.5) * 0.3,
-                    vy: Math.random() * 0.2 + 0.1,
-                  });
-                }
-              }
-            }
-
-            ss.lastX = s.x;
-            ss.lastY = s.y;
-          }
-
-          // UI overlays sit relative to the character's visual bottom. For a
-          // 32px sprite anchored at (0.5, 0.85) the feet are ~5px below
-          // origin; for circles use the legacy radius-based offset.
-          const isSprite = g.body instanceof Sprite;
-          const overlayBaseY = isSprite ? 6 : ARCHETYPE_RADIUS[s.archetype] + 3;
-          const labelY = isSprite ? 10 : ARCHETYPE_RADIUS[s.archetype] + 7;
-
-          g.energyBar.clear();
-          const barW = 14;
-          g.energyBar.rect(-barW / 2, overlayBaseY, barW, 2).fill({ color: 0x334155 });
-          let energyColor: number;
-          if (s.energy < 0.3) {
-            const t = s.energy / 0.3;
-            const er = Math.round(0xe7 + (0xf3 - 0xe7) * t);
-            const eg = Math.round(0x4c + (0x9c - 0x4c) * t);
-            const eb = Math.round(0x3c + (0x12 - 0x3c) * t);
-            energyColor = (er << 16) | (eg << 8) | eb;
-          } else if (s.energy < 0.7) {
-            const t = (s.energy - 0.3) / 0.4;
-            const er = Math.round(0xf3 + (0x34 - 0xf3) * t);
-            const eg = Math.round(0x9c + (0xd3 - 0x9c) * t);
-            const eb = Math.round(0x12 + (0x99 - 0x12) * t);
-            energyColor = (er << 16) | (eg << 8) | eb;
-          } else {
-            energyColor = 0x34d399;
-          }
-          g.energyBar.rect(-barW / 2, overlayBaseY, barW * s.energy, 2).fill({ color: energyColor });
-
-          g.label.position.set(0, labelY);
-          if (g.label.text !== s.name) g.label.text = s.name;
-
-          // Speech-bubble / thinking indicator anchor: above the head. For
-          // sprites that's roughly -28 above the entity origin (sprite stands
-          // 32 px tall and is anchored 0.85 from the top); for circles it's
-          // the negated radius.
-          const headTopY = isSprite ? -28 : -ARCHETYPE_RADIUS[s.archetype] - 6;
-
-          if (s.speechBubble) {
-            if (g.bubble.text !== s.speechBubble) g.bubble.text = s.speechBubble;
-            g.bubble.position.set(0, headTopY);
-            g.bubble.visible = true;
-          } else {
-            g.bubble.visible = false;
-          }
-
-          // T3 "thinking" indicator: a pulsing purple dot above the entity.
-          if (thinkingIds.has(s.id)) {
-            g.thinking.visible = true;
-            g.thinking.clear();
-            const pulse = 0.6 + 0.4 * Math.abs(Math.sin(now / 250));
-            const ty = headTopY - 8;
-            g.thinking.circle(0, ty, 2.5).fill({ color: 0xa855f7, alpha: pulse });
-            g.thinking.circle(5, ty, 2).fill({ color: 0xa855f7, alpha: pulse * 0.7 });
-            g.thinking.circle(-5, ty, 2).fill({ color: 0xa855f7, alpha: pulse * 0.7 });
-          } else if (g.thinking.visible) {
-            g.thinking.visible = false;
-            g.thinking.clear();
-          }
+          renderEntity(s, g);
         }
 
         for (const [id, g] of gfx) {
