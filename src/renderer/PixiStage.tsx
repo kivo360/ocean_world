@@ -4,6 +4,25 @@ import type { EntitySnapshot } from "../simulation/entity";
 import { ARCHETYPE_COLORS, ARCHETYPE_RADIUS } from "./theme";
 import { pickAnimation, SpriteAtlas } from "./sprite-atlas";
 
+// ── T3 motion constants ──────────────────────────────────────────────────────
+/** Per-frame lerp factor toward simulation position (visual-only). */
+const ENTITY_EASING = 0.15;
+/** Minimum per-frame pixel movement to be considered "walking". */
+const WALK_PIXEL_THRESHOLD = 0.15;
+/** Ms of no movement before idle-fidget kicks in. */
+const IDLE_FIDGET_MS = 5000;
+/** Minimum ms between footstep dust spawns. */
+const FOOTSTEP_INTERVAL_MS = 420;
+/** How long (ms) a single dust particle fades out. */
+const DUST_LIFETIME_MS = 300;
+
+type DustParticle = {
+  gfx: Graphics;
+  spawnMs: number;
+  vx: number;
+  vy: number;
+};
+
 function entityIdHash(id: string): number {
   let h = 0;
   for (let i = 0; i < id.length; i++) {
@@ -22,6 +41,9 @@ type SpriteAnimState = {
   lastFrameMs: number;
   lastX: number;
   lastY: number;
+  lastMovedMs: number;
+  transitionFrames: number;
+  lastFootstepMs: number;
 };
 
 type EntityGfx = {
@@ -33,6 +55,8 @@ type EntityGfx = {
   group: Container;
   /** Set when body is a Sprite (i.e. atlas had this archetype). */
   sprite?: SpriteAnimState;
+  visualX: number;
+  visualY: number;
 };
 
 export type CameraBounds = { x: number; y: number; w: number; h: number };
@@ -116,9 +140,11 @@ export function PixiStage({
     // bg-grid, entity groups, selection ring — lives inside it. To pan the
     // camera we mutate worldLayer.position. The viewport is the canvas itself.
     let worldLayer: Container | null = null;
+    let dustLayer: Container | null = null;
     let entityLayer: Container | null = null;
     let selectionRing: Graphics | null = null;
     let rafId = 0;
+    const dustParticles: DustParticle[] = [];
 
     (async () => {
       app = new Application();
@@ -159,6 +185,9 @@ export function PixiStage({
       for (let y = 0; y <= wH; y += 50) bg.moveTo(0, y).lineTo(wW, y);
       bg.stroke({ color: 0x1e293b, width: 1, alpha: 0.4 });
       worldLayer.addChild(bg);
+
+      dustLayer = new Container();
+      worldLayer.addChild(dustLayer);
 
       entityLayer = new Container();
       worldLayer.addChild(entityLayer);
@@ -260,6 +289,9 @@ export function PixiStage({
                 lastFrameMs: now,
                 lastX: s.x,
                 lastY: s.y,
+                lastMovedMs: now,
+                transitionFrames: 0,
+                lastFootstepMs: 0,
               };
             } else {
               const color = ARCHETYPE_COLORS[s.archetype];
@@ -296,10 +328,13 @@ export function PixiStage({
             group.addChild(thinking);
             entityLayer.addChild(group);
 
-            g = { body, energyBar, bubble, label, thinking, group, sprite: spriteState };
+            g = { body, energyBar, bubble, label, thinking, group, sprite: spriteState, visualX: s.x, visualY: s.y };
             gfx.set(s.id, g);
           }
-          g.group.position.set(s.x, s.y);
+          // Visual-only acceleration easing toward simulation position.
+          g.visualX += (s.x - g.visualX) * ENTITY_EASING;
+          g.visualY += (s.y - g.visualY) * ENTITY_EASING;
+          g.group.position.set(g.visualX, g.visualY);
 
           const bobOffset = Math.sin(now / 800 + entityIdHash(s.id) * 0.5) * 1.5;
           g.group.y += bobOffset;
@@ -316,21 +351,83 @@ export function PixiStage({
             const ss = g.sprite;
             const dx = s.x - ss.lastX;
             const dy = s.y - ss.lastY;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            const isMoving = dist > WALK_PIXEL_THRESHOLD;
             const desired = pickAnimation(dx, dy);
-            const anim = atlas.animation(desired);
-            if (anim) {
-              if (desired !== ss.animName) {
-                ss.animName = desired;
+
+            // Track last movement timestamp for idle-fidget detection.
+            if (isMoving) {
+              ss.lastMovedMs = now;
+            }
+
+            if (desired !== ss.animName) {
+              if (desired === "idle") {
+                // Stop-animation interpolation: instead of snapping frameIdx
+                // to 0, coast it down smoothly over 2 transition frames.
+                ss.transitionFrames = 2;
+              } else {
                 ss.frameIdx = 0;
-                ss.lastFrameMs = now;
-              } else if (now - ss.lastFrameMs >= anim.frameDurationMs) {
-                const advance = Math.floor((now - ss.lastFrameMs) / anim.frameDurationMs);
-                ss.frameIdx = (ss.frameIdx + advance) % anim.frames;
+              }
+              ss.animName = desired;
+              ss.lastFrameMs = now;
+            }
+
+            const anim = atlas.animation(ss.animName);
+            if (anim) {
+              if (now - ss.lastFrameMs >= anim.frameDurationMs) {
+                if (ss.transitionFrames > 0) {
+                  ss.frameIdx = Math.max(ss.frameIdx - 1, 0);
+                  ss.transitionFrames--;
+                } else {
+                  const advance = Math.floor(
+                    (now - ss.lastFrameMs) / anim.frameDurationMs,
+                  );
+                  ss.frameIdx = (ss.frameIdx + advance) % anim.frames;
+                }
                 ss.lastFrameMs = now;
               }
-              const tex = atlas.frameTexture(s.archetype, ss.animName, ss.frameIdx);
+              const tex = atlas.frameTexture(
+                s.archetype,
+                ss.animName,
+                ss.frameIdx,
+              );
               if (tex) g.body.texture = tex;
             }
+
+            // Idle fidget: occasional subtle bounce after 5+ seconds still.
+            if (!isMoving && now - ss.lastMovedMs > IDLE_FIDGET_MS) {
+              const wobble = Math.sin(now / 2000 + entityIdHash(s.id) * 3.7);
+              if (wobble > 0.95) {
+                g.group.y -= 1.5;
+              }
+            }
+
+            // Footstep dust: spawn 1-3 small particles on walking cadence.
+            if (isMoving && now - ss.lastFootstepMs >= FOOTSTEP_INTERVAL_MS) {
+              ss.lastFootstepMs = now;
+              if (dustLayer) {
+                const count = 1 + (entityIdHash(s.id) % 3);
+                for (let i = 0; i < count; i++) {
+                  const p = new Graphics();
+                  p.circle(0, 0, 0.5 + Math.random() * 0.5).fill({
+                    color: 0x94a3b8,
+                    alpha: 0.6,
+                  });
+                  p.position.set(
+                    g.group.x + (Math.random() - 0.5) * 6,
+                    g.group.y + 3 + (Math.random() - 0.5) * 2,
+                  );
+                  dustLayer.addChild(p);
+                  dustParticles.push({
+                    gfx: p,
+                    spawnMs: now,
+                    vx: (Math.random() - 0.5) * 0.3,
+                    vy: Math.random() * 0.2 + 0.1,
+                  });
+                }
+              }
+            }
+
             ss.lastX = s.x;
             ss.lastY = s.y;
           }
@@ -414,6 +511,20 @@ export function PixiStage({
             selectionRing
               .circle(sel.x, sel.y, radius)
               .stroke({ color: 0xffffff, width: 2, alpha: ringPulse });
+          }
+        }
+
+        // Age dust particles: fade alpha, drift with velocity, remove expired.
+        for (let i = dustParticles.length - 1; i >= 0; i--) {
+          const dp = dustParticles[i];
+          const age = now - dp.spawnMs;
+          if (age >= DUST_LIFETIME_MS) {
+            dp.gfx.destroy();
+            dustParticles.splice(i, 1);
+          } else {
+            dp.gfx.alpha = 0.6 * (1 - age / DUST_LIFETIME_MS);
+            dp.gfx.position.x += dp.vx;
+            dp.gfx.position.y += dp.vy;
           }
         }
 
