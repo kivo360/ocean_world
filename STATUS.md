@@ -63,27 +63,56 @@ Recovery (this session):
 
 Verification: `npx tsc --noEmit -p tsconfig.app.json` clean, `npx vitest run` → 125/125 passing including `sprite-atlas.test.ts` (32 tests) and the replay-determinism test.
 
-## Wave-1 features deliberately NOT recovered (deferred)
+## Wave-1 follow-up: visual polish + UI features recovered inline (2026-05-14 evening)
 
-Renderer visual polish from the wave-1 plan that diverged from wave-2's approach. Skipped this session because merging the two visual paths in `PixiStage.tsx` needed too much hand-merging for what is non-critical polish. All are recoverable later as small inline additions:
+After an audit-everything pass, restored the remaining wave-1 work that had been stripped by the integration commit. Now on `main`:
 
-| # | Feature | Where it lives in git |
-|---|---------|------------------------|
-| 2 | Idle bob (per-entity vertical sine offset) | `wave1-integration` `135665d` (renderEntity helper) |
-| 7 | Footstep dust particles | same |
-| 12 | Pulsing selection ring (alpha + radius oscillation) | same |
-| 14 | Energy bar gradient (red→yellow→green) | same |
-| 21 | Animation transition frames (smooth idle return) | same |
-| 22 | Idle fidget wobble | same |
-| 23 | Bump-into-bound edge jitter | same |
-| 92 | `renderEntity()` extraction refactor | same (the helper itself) |
+**Renderer polish** (inlined in `PixiStage.tsx`, commit `1f0b483`):
+- ✅ #2 Idle bob (per-entity vertical sine offset)
+- ✅ #7 Footstep dust particles
+- ✅ #12 Pulsing selection ring
+- ✅ #14 Energy bar gradient
+- ✅ #21 Animation transition frames (smooth idle return)
+- ✅ #22 Idle fidget wobble
+- ✅ #23 Bump-into-bound edge jitter
 
-Re-introduce via small inline additions to `PixiStage.tsx`'s render loop; no need to re-extract the helper unless that refactor is wanted on its own merits.
+**UI features** (cherry-picked `d7e60d1` + `a1647ff`):
+- ✅ #16 Shift = sprint
+- ✅ #36 Inspector portrait (archetype-colored circle)
+- ✅ #43 Player inventory panel (in Inspector)
+- ✅ #45 Filterable archetype legend
+- ✅ #47 Whistle/shout broadcast form
+- ✅ #49 Gift item (handler wired)
+- ✅ #50 Pin memory (handler wired)
+- ✅ #52 Free-text "Say to nearest" input
+- Day/night badge in header
+
+**Deliberately skipped** (pure refactor — can be redone later if wanted):
+- #92 `renderEntity()` extraction (wave-1 attempted, wave-2 inlined; current main keeps everything inline)
+
+## Wave-1 items that were never implemented (out-of-scope, not lost)
+
+Reflog confirms these were planned but never started in any wave-1 commit. They are not "missing recovery" — they're future work.
+
+**Simulation (Layer 1 in wave-1 DAG):**
+- ❌ #58 Schedule behavior (day-phase driven movement) — 90 min est
+- ❌ #60 Reputation through gossip — 30 min est
+- ❌ #64 Crowd contagion (panic spread) — 30 min est
+
+**UI (Layer 1 in wave-1 DAG):**
+- ❌ #42 Trade UI sliders — 45 min est
+- ❌ #48 Befriend / NPC follows — 30 min est
+- ❌ #69 Slow-motion (0.25× speed setting) — 5 min est
+- ❌ #70 Per-tick profiler sparkline — 30 min est
+
+**Tooling:**
+- ❌ #94 Bundle-size budget CI — 15 min est
+- ❌ #95 Publish sprite-forge to npm — 60 min est
 
 ## Open questions
 
 1. **Stage 4 (discrete maps)** — still open. Start a `docs/plan-stage-4.md`?
-2. **Wave-1 renderer polish (#2/#7/#12/#14/#21/#22/#23/#92)** — schedule as a follow-up polish pass?
+2. **Never-started wave-1 items (#58/#60/#64/#42/#48/#69/#70/#94/#95)** — pick up as new work? See list above.
 3. **Carry-over: `#88` / `#38` scope drift** from the quick-wins round — never re-verified.
 
 ## How to resume in a new chat
