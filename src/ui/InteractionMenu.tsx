@@ -1,10 +1,12 @@
 import type { Entity } from "../simulation/entity";
 
-export type InteractionChoice = "talk" | "inspect" | "close";
+export type InteractionChoice = "talk" | "inspect" | "trade" | "befriend" | "close";
 
 const CHOICES: Array<{ key: string; choice: InteractionChoice; label: string }> = [
   { key: "1", choice: "talk", label: "Talk" },
   { key: "2", choice: "inspect", label: "Inspect" },
+  { key: "3", choice: "trade", label: "Trade" },
+  { key: "4", choice: "befriend", label: "Befriend" },
   { key: "Esc", choice: "close", label: "Walk away" },
 ];
 

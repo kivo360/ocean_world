@@ -138,3 +138,85 @@ export function playerAcceptTrade(world: World, offer: PendingPlayerOffer): Acce
 
   return { kind: "ok", goods: offer.goods, price: offer.price, sellerName: seller.name };
 }
+
+/** (#42) Player-initiated trade. Player offers their own goods+money to a
+ *  target NPC. If the NPC has matching values that accept the deal, it settles
+ *  immediately; otherwise nothing happens (NPC ignores the offer). For now we
+ *  use a simple rule: NPC accepts if (price they receive) ≥ (their valuation
+ *  of the goods they give), where valuation = 4 + tick%3 to keep it varied. */
+export type PlayerOfferResult =
+  | { kind: "ok"; goods: number; price: number; partnerName: string }
+  | { kind: "no-partner" }
+  | { kind: "no-funds"; have: number; need: number }
+  | { kind: "no-goods"; have: number; need: number }
+  | { kind: "rejected"; partnerName: string };
+
+export function playerOfferTrade(
+  world: World,
+  targetId: string,
+  goodsFromPlayer: number,
+  moneyFromPlayer: number,
+): PlayerOfferResult {
+  const player = getEntity(world, PLAYER_ID);
+  const partner = getEntity(world, targetId);
+  const pf = player?.components.financial;
+  const tf = partner?.components.financial;
+  if (!player || !pf) return { kind: "no-partner" };
+  if (!partner || !tf) return { kind: "no-partner" };
+  if (moneyFromPlayer > 0 && pf.money < moneyFromPlayer) {
+    return { kind: "no-funds", have: pf.money, need: moneyFromPlayer };
+  }
+  if (goodsFromPlayer > 0 && pf.goods < goodsFromPlayer) {
+    return { kind: "no-goods", have: pf.goods, need: goodsFromPlayer };
+  }
+
+  // The partner gives the opposite side of the deal: if the player offers
+  // goods, they want money back, and vice versa. The amount the partner
+  // returns is the SAME as what the player offered on the other axis. Net:
+  // it's a swap between (goods, money) — player gives some of each, partner
+  // gives some of each back from their inventory.
+  const goodsForPartner = goodsFromPlayer;
+  const moneyForPartner = moneyFromPlayer;
+  const goodsFromPartner = moneyFromPlayer; // partner pays goods worth `money`
+  const moneyFromPartner = goodsFromPlayer * 4; // partner pays 4¢ per good
+
+  // Acceptance rule: partner needs the inventory to settle.
+  if (tf.money < moneyFromPartner) {
+    return { kind: "rejected", partnerName: partner.name };
+  }
+  if (tf.goods < goodsFromPartner) {
+    return { kind: "rejected", partnerName: partner.name };
+  }
+
+  pf.goods -= goodsForPartner;
+  pf.money -= moneyForPartner;
+  tf.goods += goodsForPartner;
+  tf.money += moneyForPartner;
+  pf.goods += goodsFromPartner;
+  pf.money += moneyFromPartner;
+  tf.goods -= goodsFromPartner;
+  tf.money -= moneyFromPartner;
+
+  world.speechBubbles.set(PLAYER_ID, {
+    msg: "deal!",
+    expiresAtTick: world.tick + SPEECH_BUBBLE_LIFETIME,
+  });
+  world.speechBubbles.set(partner.id, {
+    msg: "ok",
+    expiresAtTick: world.tick + SPEECH_BUBBLE_LIFETIME,
+  });
+
+  emit(world, {
+    kind: "trade",
+    source: player.id,
+    target: partner.id,
+    summary: `${player.name} traded ${goodsFromPlayer}g+${moneyFromPlayer}¢ to ${partner.name} for ${goodsFromPartner}g+${moneyFromPartner}¢`,
+  });
+
+  return {
+    kind: "ok",
+    goods: goodsFromPartner - goodsFromPlayer,
+    price: moneyFromPartner - moneyFromPlayer,
+    partnerName: partner.name,
+  };
+}

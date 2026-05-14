@@ -20,8 +20,26 @@ export const Wander: BehaviorModule = {
     const phase = current?.phase ?? "Idle";
 
     if (phase === "Idle" || phase === "Arrived" || p.destX === null || p.destY === null) {
-      const destX = world.rng.range(30, world.bounds.width - 30);
-      const destY = world.rng.range(30, world.bounds.height - 30);
+      // (#48) Befriend: pick destinations near the befriender if any, so the
+      // NPC orbits the player. Falls back to random when out of sight.
+      let destX: number;
+      let destY: number;
+      if (entity.befriendedBy) {
+        const friend = world.entities.get(entity.befriendedBy);
+        const fp = friend?.components.physical;
+        if (fp) {
+          const ox = world.rng.range(-40, 40);
+          const oy = world.rng.range(-40, 40);
+          destX = Math.max(30, Math.min(world.bounds.width - 30, fp.x + ox));
+          destY = Math.max(30, Math.min(world.bounds.height - 30, fp.y + oy));
+        } else {
+          destX = world.rng.range(30, world.bounds.width - 30);
+          destY = world.rng.range(30, world.bounds.height - 30);
+        }
+      } else {
+        destX = world.rng.range(30, world.bounds.width - 30);
+        destY = world.rng.range(30, world.bounds.height - 30);
+      }
       p.destX = destX;
       p.destY = destY;
       setBehaviorPhase(entity, "Wander", "Moving", { destX, destY });

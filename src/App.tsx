@@ -6,6 +6,7 @@ import {
   pendingPlayerOffer,
   playerAcceptTrade,
   playerInteractMissed,
+  playerOfferTrade,
   playerSpeak,
 } from "./simulation/player-actions";
 import { REGISTRY } from "./behaviors/registry";
@@ -23,6 +24,7 @@ import {
 import { HoverPeek } from "./ui/HoverPeek";
 import { Minimap } from "./ui/Minimap";
 import { ProfilerSparkline } from "./ui/ProfilerSparkline";
+import { TradePanel } from "./ui/TradePanel";
 import { PixiStage } from "./renderer/PixiStage";
 import { RegionLabel } from "./ui/RegionLabel";
 import { smallVillage } from "./scenarios/small-village";
@@ -186,6 +188,7 @@ export default function App() {
   const [rightTab, setRightTab] = useState<"inspector" | "chat" | "deliberations">("inspector");
   const [menuTargetId, setMenuTargetId] = useState<string | null>(null);
   menuTargetIdRef.current = menuTargetId;
+  const [tradeTargetId, setTradeTargetId] = useState<string | null>(null);
 
   const [archetypeFilter, setArchetypeFilter] = useState<Archetype | null>(null);
   const [speechDraft, setSpeechDraft] = useState("");
@@ -267,6 +270,28 @@ export default function App() {
         if (e.key === "2") {
           setSelectedId(menuTargetIdRef.current);
           setRightTab("inspector");
+          setMenuTargetId(null);
+          return;
+        }
+        if (e.key === "3") {
+          // (#42) Trade
+          setTradeTargetId(menuTargetIdRef.current);
+          setMenuTargetId(null);
+          return;
+        }
+        if (e.key === "4") {
+          // (#48) Befriend toggle
+          const w = worldRef.current;
+          const ent = w.entities.get(menuTargetIdRef.current);
+          if (ent) {
+            ent.befriendedBy = ent.befriendedBy === PLAYER_ID ? undefined : PLAYER_ID;
+            w.speechBubbles.set(ent.id, {
+              msg: ent.befriendedBy ? "friend!" : "...",
+              expiresAtTick: w.tick + 4,
+            });
+            snapshotsRef.current = snapshot(w);
+            setRenderTick((t) => t + 1);
+          }
           setMenuTargetId(null);
           return;
         }
@@ -509,10 +534,49 @@ export default function App() {
       } else if (choice === "inspect") {
         setSelectedId(target);
         setRightTab("inspector");
+      } else if (choice === "trade") {
+        // (#42) Open the trade panel — the menu closes, panel takes over.
+        setTradeTargetId(target);
+      } else if (choice === "befriend") {
+        // (#48) Toggle befriended-by state. Befriended NPCs orbit the player
+        // via Wander; toggling off restores random wandering.
+        const ent = w.entities.get(target);
+        if (ent) {
+          ent.befriendedBy = ent.befriendedBy === PLAYER_ID ? undefined : PLAYER_ID;
+          w.speechBubbles.set(target, {
+            msg: ent.befriendedBy ? "friend!" : "...",
+            expiresAtTick: w.tick + 4,
+          });
+          snapshotsRef.current = snapshot(w);
+          setRenderTick((t) => t + 1);
+        }
       }
       setMenuTargetId(null);
     },
     [],
+  );
+
+  const handleTradeOffer = useCallback(
+    (goods: number, money: number) => {
+      if (!tradeTargetId) return;
+      const result = playerOfferTrade(worldRef.current, tradeTargetId, goods, money);
+      // Surface failure feedback as a brief speech bubble on the player.
+      if (result.kind === "rejected") {
+        worldRef.current.speechBubbles.set(PLAYER_ID, {
+          msg: `${result.partnerName} declined`,
+          expiresAtTick: worldRef.current.tick + 4,
+        });
+      } else if (result.kind === "no-funds" || result.kind === "no-goods") {
+        worldRef.current.speechBubbles.set(PLAYER_ID, {
+          msg: "can't afford",
+          expiresAtTick: worldRef.current.tick + 4,
+        });
+      }
+      snapshotsRef.current = snapshot(worldRef.current);
+      setRenderTick((t) => t + 1);
+      setTradeTargetId(null);
+    },
+    [tradeTargetId],
   );
 
   const handleDirectSpeak = useCallback((msg: string) => {
@@ -909,6 +973,21 @@ export default function App() {
               onChoose={handleMenuChoice}
             />
           )}
+          {tradeTargetId && (() => {
+            const partner = worldRef.current.entities.get(tradeTargetId);
+            const player = worldRef.current.entities.get(PLAYER_ID);
+            const pf = player?.components.financial;
+            if (!partner || !pf) return null;
+            return (
+              <TradePanel
+                partnerName={partner.name}
+                playerGoods={pf.goods}
+                playerMoney={pf.money}
+                onOffer={handleTradeOffer}
+                onClose={() => setTradeTargetId(null)}
+              />
+            );
+          })()}
         </div>
         <aside
           style={{

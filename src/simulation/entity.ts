@@ -38,6 +38,9 @@ export type Entity = {
   lastBehaviorTick: Partial<Record<BehaviorName, number>>;
   cooldowns: Partial<Record<BehaviorName, number>>;
   starvingTicks?: number;
+  /** (#48) When set, this entity's Wander prefers destinations near the named
+   *  player/entity instead of random. Set by the Befriend interaction. */
+  befriendedBy?: string;
 };
 
 export type EntitySnapshot = {
