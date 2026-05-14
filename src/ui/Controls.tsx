@@ -49,7 +49,7 @@ export function Controls(props: ControlsProps) {
       </button>
       <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
         <span style={{ fontSize: 12, opacity: 0.7 }}>Speed</span>
-        {[1, 2, 5, 10].map((s) => (
+        {[0.25, 1, 2, 5, 10].map((s) => (
           <button
             key={s}
             style={{

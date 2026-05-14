@@ -14,7 +14,8 @@
     "ontology:validate": "node --env-file-if-exists=.env.local --import tsx scripts/ontology-validate.ts",
     "ontology:build": "node --env-file-if-exists=.env.local --import tsx scripts/orchestrator-run.ts",
     "agent:serve": "node --env-file-if-exists=.env.local --import tsx scripts/agent-bridge-serve.ts",
-    "sandbox:serve": "node --env-file-if-exists=.env.local --import tsx scripts/sandbox-agent-serve.ts"
+    "sandbox:serve": "node --env-file-if-exists=.env.local --import tsx scripts/sandbox-agent-serve.ts",
+    "check-bundle-size": "node --import tsx scripts/check-bundle-size.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.91.0",
