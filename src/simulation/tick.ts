@@ -153,6 +153,9 @@ function valueWeight(values: Values, behavior: BehaviorName): number {
       return 0.5 + 0.5 * values.fairness;
     case "MerchantCoordination":
       return 0.5 + 0.5 * values.profit;
+    case "Schedule":
+      // Routine adherence — autonomy-light entities follow schedule more.
+      return 0.5 + 0.5 * (1 - values.autonomy);
   }
 }
 

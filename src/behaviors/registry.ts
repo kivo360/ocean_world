@@ -7,6 +7,7 @@ import { MarkPrice } from "./mark-price";
 import { MerchantCoordination } from "./merchant-coordination";
 import { PursueViolators } from "./pursue-violators";
 import { Rest } from "./rest";
+import { Schedule } from "./schedule";
 import { Trade } from "./trade";
 import { Wander } from "./wander";
 
@@ -21,4 +22,5 @@ export const REGISTRY: BehaviorRegistry = {
   AvoidLawkeepers,
   PursueViolators,
   MerchantCoordination,
+  Schedule,
 };

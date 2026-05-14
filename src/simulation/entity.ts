@@ -18,7 +18,8 @@ export type BehaviorName =
   | "GroupUp"
   | "AvoidLawkeepers"
   | "PursueViolators"
-  | "MerchantCoordination";
+  | "MerchantCoordination"
+  | "Schedule";
 
 export type BehaviorState = {
   name: BehaviorName;
