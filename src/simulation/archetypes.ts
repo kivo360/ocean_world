@@ -163,6 +163,7 @@ export function spawnEntity(opts: {
         attentionFocus: null,
         workingMemoryLoad: 0,
         mood: 0.5,
+        reputation: {},
       },
       financial: {
         money: spec.baseMoney + opts.rng.int(-10, 10),

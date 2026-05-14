@@ -485,6 +485,40 @@ function applySpeak(
     target: target.id,
     summary: `${speaker.name} → ${target.name}: ${action.msg}`,
   });
+  // (#60) Reputation: tiny mutual bump + gossip propagates speaker's view of
+  // a random third party to the listener.
+  adjustRep(speaker, target.id, 0.02);
+  adjustRep(target, speaker.id, 0.02);
+  propagateGossip(world, target, speaker);
+}
+
+/** (#60) Move `observer`'s reputation of `targetId` by delta, clamped to
+ *  [-1, 1]. Players have no cognitive state and are skipped silently. */
+function adjustRep(observer: Entity, targetId: string, delta: number): void {
+  const cog = observer.components.cognitive;
+  if (!cog) return;
+  const current = cog.reputation[targetId] ?? 0;
+  cog.reputation[targetId] = Math.max(-1, Math.min(1, current + delta));
+}
+
+/** (#60) Gossip propagation: when speaker tells listener something, drift
+ *  listener's reputation of some third party toward the speaker's value. */
+function propagateGossip(world: World, listener: Entity, speaker: Entity): void {
+  const lCog = listener.components.cognitive;
+  const sCog = speaker.components.cognitive;
+  if (!lCog || !sCog) return;
+  const eligible: Array<[string, number]> = [];
+  for (const [thirdId, rep] of Object.entries(sCog.reputation)) {
+    if (thirdId === listener.id || thirdId === speaker.id) continue;
+    if (!world.entities.has(thirdId)) continue;
+    eligible.push([thirdId, rep]);
+  }
+  if (eligible.length === 0) return;
+  const pick = eligible[Math.floor(world.rng.next() * eligible.length)];
+  const [thirdId, speakerOpinion] = pick;
+  const listenerOpinion = lCog.reputation[thirdId] ?? 0;
+  const drift = (speakerOpinion - listenerOpinion) * 0.1;
+  lCog.reputation[thirdId] = Math.max(-1, Math.min(1, listenerOpinion + drift));
 }
 
 function handleTrade(
@@ -556,6 +590,9 @@ function settleTrade(
     msg: "sold!",
     expiresAtTick: world.tick + SPEECH_BUBBLE_LIFETIME,
   });
+  // (#60) Trade strengthens mutual reputation more than speech.
+  adjustRep(buyer, seller.id, 0.15);
+  adjustRep(seller, buyer.id, 0.15);
 }
 
 function applyPerceivedInputs(world: World, ctx: ResolveContext): void {
@@ -622,6 +659,27 @@ function passiveDecay(world: World, ambientFrame: boolean): void {
     if (cog && cog.mood !== undefined) {
       if (cog.mood > 0.5) cog.mood = Math.max(0.5, cog.mood - 0.01);
       else if (cog.mood < 0.5) cog.mood = Math.min(0.5, cog.mood + 0.01);
+    }
+
+    // (#64) Crowd contagion: shift mood toward the average of perceived
+    // neighbors. Spreads panic in dense crowds; soothes when surrounded by
+    // calm. Stronger than neutral-drift so contagion dominates in groups.
+    const perceived = entity.components.perceived;
+    if (cog && perceived && perceived.nearbyIds.length > 0) {
+      let sum = 0;
+      let count = 0;
+      for (const otherId of perceived.nearbyIds) {
+        const other = world.entities.get(otherId);
+        const oCog = other?.components.cognitive;
+        if (oCog && oCog.mood !== undefined) {
+          sum += oCog.mood;
+          count++;
+        }
+      }
+      if (count > 0) {
+        const neighborAvg = sum / count;
+        cog.mood = cog.mood + (neighborAvg - cog.mood) * 0.05;
+      }
     }
 
     // Long-term savings: draw from savings to buy food when energy is low

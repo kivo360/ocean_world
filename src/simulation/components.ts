@@ -23,6 +23,9 @@ export type CognitiveState = {
   attentionFocus: string | null;
   workingMemoryLoad: number;
   mood: number; // 0-1, 0.5 neutral. Biases behavior scores.
+  /** (#60) Per-other-entity reputation, -1 = enemy, +1 = ally. Spreads via
+   *  gossip in tick.ts. */
+  reputation: Record<string, number>;
 };
 
 export type FinancialState = {

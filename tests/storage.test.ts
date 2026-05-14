@@ -55,6 +55,7 @@ describe("InMemoryRepository", () => {
         attentionFocus: null,
         workingMemoryLoad: 0,
         mood: 0.5,
+        reputation: {},
       },
     });
     const updated = (await repo.getEntity(id))!;
