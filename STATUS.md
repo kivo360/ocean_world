@@ -29,14 +29,17 @@ Always read `ROADMAP.md` for "where are we strategically?" and this file for
 
 ## Branches
 
-| Branch | Status | Purpose |
-|--------|--------|---------|
-| `main` | active, tracks `origin/main`, clean | live development |
-| `backup-pre-recovery` | local-only safety net | snapshot of main at HEAD before the 2026-05-14 recovery; delete after a session or two if recovery proves stable |
-| `wave1-simulation` | local-only, content recovered | safe to delete |
-| `wave1-ui` | local-only, content recovered | safe to delete |
-| `wave1-tooling` | local-only, content recovered | safe to delete |
-| `wave1-integration` | local-only, content recovered | safe to delete |
+| Branch | Status | Last commit |
+|--------|--------|-------------|
+| `main` | active, tracks `origin/main`, clean | `65d81dd docs(status): refresh after wave-1 recovery` |
+
+All four `wave1-*` branches and the `backup-pre-recovery` safety branch were deleted at the end of this session after the recovery was verified (typecheck clean, 125/125 tests, social behaviors wired). If anything turns out wrong, the deleted commit tips are still reachable via `git reflog` for ~30 days:
+
+- `wave1-simulation` was at `b7dd349`
+- `wave1-ui` was at `d9db6ce`
+- `wave1-tooling` was at `ea43cd5`
+- `wave1-integration` was at `4bf844f`
+- `backup-pre-recovery` was at `3e216fb`
 
 Remote: `git@github.com:kivo360/ocean_world.git` (public). Only `main` on origin.
 
@@ -79,10 +82,9 @@ Re-introduce via small inline additions to `PixiStage.tsx`'s render loop; no nee
 
 ## Open questions
 
-1. **Delete the four `wave1-*` branches and `backup-pre-recovery`?** Content is all on main. Backup is safety net — usually fine to delete after a session or two. Wave-1 branches are now redundant.
-2. **Stage 4 (discrete maps)** — still open. Start a `docs/plan-stage-4.md`?
-3. **Wave-1 renderer polish (#2/#7/#12/#14/#21/#22/#23/#92)** — schedule as a follow-up polish pass?
-4. **Carry-over: `#88` / `#38` scope drift** from the quick-wins round — never re-verified.
+1. **Stage 4 (discrete maps)** — still open. Start a `docs/plan-stage-4.md`?
+2. **Wave-1 renderer polish (#2/#7/#12/#14/#21/#22/#23/#92)** — schedule as a follow-up polish pass?
+3. **Carry-over: `#88` / `#38` scope drift** from the quick-wins round — never re-verified.
 
 ## How to resume in a new chat
 
