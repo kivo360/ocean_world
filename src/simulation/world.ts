@@ -11,6 +11,7 @@ import {
 import type { BehaviorName, Entity, EntitySnapshot } from "./entity";
 import { createGraphMemory, type GraphMemory } from "./graph-memory";
 import { findRegion, type Region } from "./regions";
+import type { ReplayRecorder } from "./replay";
 import type { Rng } from "./rng";
 import type { ActiveScenario } from "./scenarios";
 
@@ -49,6 +50,9 @@ export type World = {
   regions: Region[];
   activeRegionId: string | null;
   decorations: Decoration[];
+  // Optional deterministic replay recorder. When attached, each tick is
+  // snapshotted for later comparison (A/B testing, regression).
+  replayRecorder?: ReplayRecorder;
 };
 
 const GRAPHED_EVENT_KINDS: ReadonlySet<string> = new Set([
@@ -158,6 +162,7 @@ export function snapshot(world: World): EntitySnapshot[] {
       energy: p?.energy ?? 0,
       money: f?.money ?? 0,
       goods: f?.goods ?? 0,
+      savings: f?.savings ?? 0,
       speechBubble: bubble && bubble.expiresAtTick >= world.tick ? bubble.msg : null,
     });
   }
