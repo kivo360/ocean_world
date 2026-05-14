@@ -90,29 +90,29 @@ After an audit-everything pass, restored the remaining wave-1 work that had been
 **Deliberately skipped** (pure refactor — can be redone later if wanted):
 - #92 `renderEntity()` extraction (wave-1 attempted, wave-2 inlined; current main keeps everything inline)
 
-## Wave-1 items that were never implemented (out-of-scope, not lost)
+## Wave-1 never-started items: now implemented (2026-05-14 evening)
 
-Reflog confirms these were planned but never started in any wave-1 commit. They are not "missing recovery" — they're future work.
+All Layer-1 items that were planned but had never been coded in any wave-1 commit are now done.
 
-**Simulation (Layer 1 in wave-1 DAG):**
-- ❌ #58 Schedule behavior (day-phase driven movement) — 90 min est
-- ❌ #60 Reputation through gossip — 30 min est
-- ❌ #64 Crowd contagion (panic spread) — 30 min est
+**Simulation:**
+- ✅ #58 Schedule behavior — day-phase driven movement, archetype-specific routines across morning/noon/evening/night (`src/behaviors/schedule.ts`, commit `44129e8`)
+- ✅ #60 Reputation through gossip — `CognitiveState.reputation` + propagation in `applySpeak` + boost in `settleTrade` (commit `04456c3`)
+- ✅ #64 Crowd contagion — mood drifts 5% toward perceived-neighbor average each tick (commit `04456c3`)
 
-**UI (Layer 1 in wave-1 DAG):**
-- ❌ #42 Trade UI sliders — 45 min est
-- ❌ #48 Befriend / NPC follows — 30 min est
-- ❌ #69 Slow-motion (0.25× speed setting) — 5 min est
-- ❌ #70 Per-tick profiler sparkline — 30 min est
+**UI:**
+- ✅ #42 Trade UI sliders — `TradePanel` with goods/money sliders + `playerOfferTrade` (commit `d52d36a`)
+- ✅ #48 Befriend / NPC follows — `Entity.befriendedBy` field, Wander steers toward befriender (commit `d52d36a`)
+- ✅ #69 Slow-motion — 0.25× speed button in Controls (commit `31649dd`)
+- ✅ #70 Per-tick profiler sparkline — T1/T2/T3 timing capture + new `ProfilerSparkline` component (commit `376fa37`)
 
 **Tooling:**
-- ❌ #94 Bundle-size budget CI — 15 min est
-- ❌ #95 Publish sprite-forge to npm — 60 min est
+- ✅ #94 Bundle-size budget CI — restored `.github/workflows/ci.yml` and added `scripts/check-bundle-size.ts` with a 4.5 MB gzipped budget (commit `31649dd`)
+- ⏭ #95 Publish sprite-forge to npm — deferred (requires npm account credentials)
 
 ## Open questions
 
 1. **Stage 4 (discrete maps)** — still open. Start a `docs/plan-stage-4.md`?
-2. **Never-started wave-1 items (#58/#60/#64/#42/#48/#69/#70/#94/#95)** — pick up as new work? See list above.
+2. **#95 Publish sprite-forge to npm** — needs your npm account credentials; tell me when you want to set that up.
 3. **Carry-over: `#88` / `#38` scope drift** from the quick-wins round — never re-verified.
 
 ## How to resume in a new chat
