@@ -71,6 +71,12 @@ type SpriteAnimState = {
   lastY: number;
   prevDirectionProposal: string;
   directionLockTicks: number;
+  /** Most recent timestamp the entity was moving — drives idle fidget. */
+  lastMovedMs: number;
+  /** When > 0, frameIdx walks back toward 0 over this many ticks (#21). */
+  transitionFrames: number;
+  /** Last timestamp this entity spawned footstep dust (#7). */
+  lastFootstepDustMs: number;
 };
 
 type EntityGfx = {
@@ -127,6 +133,23 @@ const CAMERA_DEAD_ZONE_FRAC = 0.3; // 30% of viewport in each axis
 const SHAKE_DURATION_MS = 200;
 // Peak amplitude (px) at the moment the shake starts; decays linearly to 0.
 const SHAKE_AMPLITUDE_PX = 4;
+
+// (#7 / #21 / #22 / #23) Wave-1 polish constants.
+/** Per-frame pixel delta below which an entity is considered idle. */
+const WALK_PIXEL_THRESHOLD = 0.15;
+/** Ms of no movement before idle-fidget kicks in. */
+const IDLE_FIDGET_MS = 5000;
+/** Minimum ms between footstep dust spawns per entity. */
+const FOOTSTEP_DUST_INTERVAL_MS = 420;
+/** How long (ms) a single dust particle fades out. */
+const DUST_LIFETIME_MS = 300;
+
+type DustParticle = {
+  gfx: Graphics;
+  spawnMs: number;
+  vx: number;
+  vy: number;
+};
 
 const LABEL_STYLE = new TextStyle({
   fontFamily: "ui-sans-serif, system-ui",
@@ -191,11 +214,13 @@ export function PixiStage({
     // camera we mutate worldLayer.position. The viewport is the canvas itself.
     let worldLayer: Container | null = null;
     let entityLayer: Container | null = null;
+    let dustLayer: Container | null = null;
     let inRangeRings: Graphics | null = null;
     let selectionRing: Graphics | null = null;
     let groundGraphics: Graphics | null = null;
     let dayNightOverlay: Graphics | null = null;
     let rafId = 0;
+    const dustParticles: DustParticle[] = [];
 
     // (#15) Camera shake state. Managed inside the render closure.
     let shakeUntilMs = 0;
@@ -264,6 +289,11 @@ export function PixiStage({
       for (let y = 0; y <= wH; y += 50) bg.moveTo(0, y).lineTo(wW, y);
       bg.stroke({ color: 0x1e293b, width: 1, alpha: 0.4 });
       worldLayer.addChild(bg);
+
+      // (#7) Dust particles sit between the grid and entities so they appear
+      // on the ground behind characters' feet.
+      dustLayer = new Container();
+      worldLayer.addChild(dustLayer);
 
       entityLayer = new Container();
       entityLayer.sortableChildren = true;
@@ -409,6 +439,9 @@ export function PixiStage({
                 lastY: s.y,
                 prevDirectionProposal: "idle",
                 directionLockTicks: 0,
+                lastMovedMs: now,
+                transitionFrames: 0,
+                lastFootstepDustMs: 0,
               };
             } else {
               const baseColor = ARCHETYPE_COLORS[s.archetype] ?? 0x94a3b8;
@@ -462,15 +495,35 @@ export function PixiStage({
             gfx.set(s.id, g);
           }
           const dp = displayPositions.get(s.id);
-          g.group.position.set(dp ? dp.x : s.x, dp ? dp.y : s.y);
-          g.group.zIndex = dp ? dp.y : s.y;
+          const baseX = dp ? dp.x : s.x;
+          const baseY = dp ? dp.y : s.y;
 
-          // Sprite animation with hysteresis + footstep detection.
+          // (#2) Idle bob — per-entity vertical sine offset, desynced by ID
+          // hash so the crowd doesn't bob in unison.
+          const bobOffset = Math.sin(now / 800 + Math.abs(hashId(s.id)) * 0.5) * 1.5;
+          let groupX = baseX;
+          let groupY = baseY + bobOffset;
+
+          // (#23) Bump-into-bound — small horizontal jitter when the entity is
+          // pressed against the world boundary.
+          const { w: bW, h: bH } = worldDimsRef.current;
+          if (s.x <= 10 || s.x >= bW - 10 || s.y <= 10 || s.y >= bH - 10) {
+            groupX += Math.sin(now / 100) * 2;
+          }
+
+          g.group.position.set(groupX, groupY);
+          g.group.zIndex = baseY;
+
+          // Sprite animation with hysteresis + footstep audio/dust + fidget.
           if (g.sprite && atlas && g.body instanceof Sprite) {
             const ss = g.sprite;
             const dx = s.x - ss.lastX;
             const dy = s.y - ss.lastY;
+            const moveDist = Math.sqrt(dx * dx + dy * dy);
+            const isMoving = moveDist > WALK_PIXEL_THRESHOLD;
             const raw = pickAnimation(dx, dy);
+
+            if (isMoving) ss.lastMovedMs = now;
 
             // Hysteresis: only switch direction when pickAnimation returns the
             // same value for 3+ consecutive frames.
@@ -493,14 +546,25 @@ export function PixiStage({
               ss.prevFrameIdx = ss.frameIdx;
 
               if (directionChanged || lockedDirection !== ss.animName) {
+                // (#21) Transitioning to idle eases back through frames instead
+                // of snapping to 0 — feels less jarring at end of a walk cycle.
+                if (lockedDirection === "idle" && ss.animName !== "idle") {
+                  ss.transitionFrames = 2;
+                } else {
+                  ss.frameIdx = 0;
+                }
                 ss.animName = lockedDirection;
-                ss.frameIdx = 0;
                 ss.lastFrameMs = now;
               } else if (now - ss.lastFrameMs >= anim.frameDurationMs) {
-                const advance = Math.floor(
-                  (now - ss.lastFrameMs) / anim.frameDurationMs,
-                );
-                ss.frameIdx = (ss.frameIdx + advance) % anim.frames;
+                if (ss.transitionFrames > 0) {
+                  ss.frameIdx = Math.max(ss.frameIdx - 1, 0);
+                  ss.transitionFrames--;
+                } else {
+                  const advance = Math.floor(
+                    (now - ss.lastFrameMs) / anim.frameDurationMs,
+                  );
+                  ss.frameIdx = (ss.frameIdx + advance) % anim.frames;
+                }
                 ss.lastFrameMs = now;
               }
 
@@ -525,13 +589,49 @@ export function PixiStage({
                 if (footDownFrames.has(ss.frameIdx)) {
                   const camX = -worldLayer.position.x + width / 2;
                   const camY = -worldLayer.position.y + height / 2;
-                  const dist = Math.hypot(s.x - camX, s.y - camY);
+                  const camDist = Math.hypot(s.x - camX, s.y - camY);
                   const vol =
-                    Math.max(0, Math.min(1, 1 - dist / 600)) * 0.35;
+                    Math.max(0, Math.min(1, 1 - camDist / 600)) * 0.35;
                   footstepSound.play(surfaceAt(s.x, s.y), vol);
                 }
               }
             }
+
+            // (#22) Idle fidget — small upward hop when wobble crosses
+            // threshold, after the entity has been stationary for IDLE_FIDGET_MS.
+            if (!isMoving && now - ss.lastMovedMs > IDLE_FIDGET_MS) {
+              const wobble = Math.sin(now / 2000 + Math.abs(hashId(s.id)) * 3.7);
+              if (wobble > 0.95) {
+                g.group.y -= 1.5;
+              }
+            }
+
+            // (#7) Footstep dust — spawn small particles at feet while walking.
+            if (isMoving && now - ss.lastFootstepDustMs >= FOOTSTEP_DUST_INTERVAL_MS) {
+              ss.lastFootstepDustMs = now;
+              if (dustLayer) {
+                const count = 1 + (Math.abs(hashId(s.id)) % 3);
+                for (let i = 0; i < count; i++) {
+                  const p = new Graphics();
+                  p.circle(0, 0, 0.5 + Math.random() * 0.5).fill({
+                    color: 0x94a3b8,
+                    alpha: 0.6,
+                  });
+                  p.position.set(
+                    g.group.x + (Math.random() - 0.5) * 6,
+                    g.group.y + 3 + (Math.random() - 0.5) * 2,
+                  );
+                  dustLayer.addChild(p);
+                  dustParticles.push({
+                    gfx: p,
+                    spawnMs: now,
+                    vx: (Math.random() - 0.5) * 0.3,
+                    vy: Math.random() * 0.2 + 0.1,
+                  });
+                }
+              }
+            }
+
             ss.lastX = s.x;
             ss.lastY = s.y;
           }
@@ -543,10 +643,27 @@ export function PixiStage({
           const overlayBaseY = isSprite ? 6 : ARCHETYPE_RADIUS[s.archetype] + 3;
           const labelY = isSprite ? 10 : ARCHETYPE_RADIUS[s.archetype] + 7;
 
+          // (#14) Energy bar with red→yellow→green gradient based on level.
           g.energyBar.clear();
           const barW = 14;
           g.energyBar.rect(-barW / 2, overlayBaseY, barW, 2).fill({ color: 0x334155 });
-          g.energyBar.rect(-barW / 2, overlayBaseY, barW * s.energy, 2).fill({ color: 0x34d399 });
+          let energyColor: number;
+          if (s.energy < 0.3) {
+            const t = s.energy / 0.3;
+            const er = Math.round(0xe7 + (0xf3 - 0xe7) * t);
+            const eg = Math.round(0x4c + (0x9c - 0x4c) * t);
+            const eb = Math.round(0x3c + (0x12 - 0x3c) * t);
+            energyColor = (er << 16) | (eg << 8) | eb;
+          } else if (s.energy < 0.7) {
+            const t = (s.energy - 0.3) / 0.4;
+            const er = Math.round(0xf3 + (0x34 - 0xf3) * t);
+            const eg = Math.round(0x9c + (0xd3 - 0x9c) * t);
+            const eb = Math.round(0x12 + (0x99 - 0x12) * t);
+            energyColor = (er << 16) | (eg << 8) | eb;
+          } else {
+            energyColor = 0x34d399;
+          }
+          g.energyBar.rect(-barW / 2, overlayBaseY, barW * s.energy, 2).fill({ color: energyColor });
 
           g.label.position.set(0, labelY);
           if (g.label.text !== s.name) g.label.text = s.name;
@@ -662,13 +779,30 @@ export function PixiStage({
           if (sel) {
             const selGfx = gfx.get(sel.id);
             const isSprite = selGfx?.body instanceof Sprite;
-            const radius = isSprite ? 14 : ARCHETYPE_RADIUS[sel.archetype] + 4;
+            // (#12) Pulsing selection ring — alpha + radius both oscillate.
+            const baseRadius = isSprite ? 14 : ARCHETYPE_RADIUS[sel.archetype] + 4;
+            const ringPulse = 0.4 + 0.6 * Math.abs(Math.sin(now / 250));
+            const radius = baseRadius + Math.sin(now / 400) * 1.5;
             const sdp = displayPositions.get(sel.id);
             const sx = sdp ? sdp.x : sel.x;
             const sy = sdp ? sdp.y : sel.y;
             selectionRing
               .circle(sx, sy, radius)
-              .stroke({ color: 0xffffff, width: 2, alpha: 0.9 });
+              .stroke({ color: 0xffffff, width: 2, alpha: ringPulse });
+          }
+        }
+
+        // (#7) Age dust particles: fade alpha, drift with velocity, retire.
+        for (let i = dustParticles.length - 1; i >= 0; i--) {
+          const dp = dustParticles[i];
+          const age = now - dp.spawnMs;
+          if (age >= DUST_LIFETIME_MS) {
+            dp.gfx.destroy();
+            dustParticles.splice(i, 1);
+          } else {
+            dp.gfx.alpha = 0.6 * (1 - age / DUST_LIFETIME_MS);
+            dp.gfx.position.x += dp.vx;
+            dp.gfx.position.y += dp.vy;
           }
         }
 
