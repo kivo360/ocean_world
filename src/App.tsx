@@ -22,6 +22,7 @@ import {
 } from "./ontology/oxigraph-reasoner";
 import { HoverPeek } from "./ui/HoverPeek";
 import { Minimap } from "./ui/Minimap";
+import { ProfilerSparkline } from "./ui/ProfilerSparkline";
 import { PixiStage } from "./renderer/PixiStage";
 import { RegionLabel } from "./ui/RegionLabel";
 import { smallVillage } from "./scenarios/small-village";
@@ -95,6 +96,8 @@ function buildWorldWithPlayer(opts: {
   memoryGraph: SurrealGraphMemory;
 }): World {
   const world = smallVillage(opts);
+  // (#70) Opt into per-tick profiler so the sparkline has data to render.
+  world.tickProfile = { samples: [] };
   // Spawn the player at the centre of the first region so they start cleanly
   // inside one map rather than on a region boundary.
   const home = world.regions[0];
@@ -697,6 +700,10 @@ export default function App() {
           </button>
         ))}
         <div style={{ flex: 1 }} />
+        <ProfilerSparkline
+          profile={worldRef.current.tickProfile}
+          renderTick={renderTick}
+        />
         <form
           onSubmit={(e) => {
             e.preventDefault();

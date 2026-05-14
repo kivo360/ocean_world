@@ -55,7 +55,26 @@ export type World = {
   replayRecorder?: ReplayRecorder;
   // Ring buffer of population counts for density auto-tuning.
   populationHistory: number[];
+  // (#70) Per-tick T1/T2/T3 timing samples, ring buffer. UI renders this as a
+  // sparkline. Opt-in: only populated when the harness sets it up.
+  tickProfile?: TickProfile;
 };
+
+export type TickProfileSample = {
+  tick: number;
+  /** Total tick duration in ms (perceive + decide + resolve). */
+  total: number;
+  perceive: number;
+  decide: number;
+  resolve: number;
+};
+
+export type TickProfile = {
+  samples: TickProfileSample[];
+};
+
+/** Max ticks of timing history to retain. */
+export const TICK_PROFILE_WINDOW = 60;
 
 const GRAPHED_EVENT_KINDS: ReadonlySet<string> = new Set([
   "speech",

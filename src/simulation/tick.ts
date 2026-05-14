@@ -16,6 +16,7 @@ import {
   getCollisions,
   getEntity,
   regionIdOf,
+  TICK_PROFILE_WINDOW,
   type EntityActivity,
   type World,
 } from "./world";
@@ -774,9 +775,29 @@ export function runTick(
   // and become part of this tick's decisions.
   maybeRunScenario(world);
   expireActiveScenario(world);
+
+  // (#70) Per-tick profiler — instrument the three big phases. Only active when
+  // the harness opts in by attaching world.tickProfile.
+  const profileOn = world.tickProfile != null;
+  const tP0 = profileOn ? performance.now() : 0;
   perceive(world, ambientFrame);
+  const tP1 = profileOn ? performance.now() : 0;
   const actions = decide(world, registry, t3Queue, reasoner, ambientFrame);
+  const tP2 = profileOn ? performance.now() : 0;
   const ctx = resolve(world, actions);
+  const tP3 = profileOn ? performance.now() : 0;
+  if (profileOn && world.tickProfile) {
+    world.tickProfile.samples.push({
+      tick: world.tick,
+      total: tP3 - tP0,
+      perceive: tP1 - tP0,
+      decide: tP2 - tP1,
+      resolve: tP3 - tP2,
+    });
+    if (world.tickProfile.samples.length > TICK_PROFILE_WINDOW) {
+      world.tickProfile.samples.shift();
+    }
+  }
   applyPerceivedInputs(world, ctx);
   passiveDecay(world, ambientFrame);
   processDeath(world);
